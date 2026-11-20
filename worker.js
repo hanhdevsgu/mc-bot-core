@@ -54,8 +54,8 @@ class BotInstance {
 
         this.farm_range = settings.farm_range !== undefined ? settings.farm_range : 5.0;
         this.farm_radius = settings.farm_radius !== undefined ? settings.farm_radius : 20;
-        this.farm_min_delay = settings.farm_min_delay !== undefined ? settings.farm_min_delay : 0.08;
-        this.farm_max_delay = settings.farm_max_delay !== undefined ? settings.farm_max_delay : 0.15;
+        this.farm_min_delay = settings.farm_min_delay !== undefined ? settings.farm_min_delay : 0.63;
+        this.farm_max_delay = settings.farm_max_delay !== undefined ? settings.farm_max_delay : 0.80;
 
         this.last_attack_time = 0;
         this.next_attack_delay = this.farm_min_delay;
@@ -1853,7 +1853,9 @@ class BotInstance {
             }
         }
 
-        this.log(`⚙️ Cập nhật settings`, '#4a9eff');
+        if (this.farm_debug) {
+            this.log(`⚙️ [debug] Cập nhật settings`, '#4a9eff');
+        }
 
         if (this.running && this.joined_server) {
             if (this.farm_persist && !this.auto_farm_running) {

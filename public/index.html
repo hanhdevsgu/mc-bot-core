@@ -350,23 +350,23 @@
           </div>
           <div class="flex items-center justify-between">
             <label class="text-slate-400">Tốc độ:</label>
-            <select id="cfgSpeedPreset" onchange="onSpeedPresetChange(this.value)" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-slate-100">
-              <option value="Cực nhanh">Cực nhanh</option>
-              <option value="Nhanh">Nhanh</option>
-              <option value="Vừa">Vừa</option>
-              <option value="Chậm">Chậm</option>
+            <select id="cfgSpeedPreset" onchange="onSpeedPresetChange(this.value)" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-slate-100 text-xs">
+              <option value="⚔️ Kiếm Max Dame (0.63 - 0.80s)">⚔️ Kiếm Max Dame (0.63 - 0.80s)</option>
+              <option value="🪓 Rìu Max Dame (1.00 - 1.25s)">🪓 Rìu Max Dame (1.00 - 1.25s)</option>
+              <option value="⚡ Tốc độ cao (0.50 - 0.80s)">⚡ Tốc độ cao (0.50 - 0.80s)</option>
+              <option value="🐢 Chậm an toàn (1.20 - 1.60s)">🐢 Chậm an toàn (1.20 - 1.60s)</option>
               <option value="Tùy chỉnh">Tùy chỉnh</option>
             </select>
           </div>
           <div class="flex items-center justify-between">
             <label class="text-slate-400">Delay min/max (s):</label>
             <div class="flex items-center gap-1.5">
-              <input type="number" step="0.01" id="cfgFarmMinDelay" class="bg-[#141622] border border-[#202436] rounded px-2 py-1 text-slate-100 w-16 text-center">
+              <input type="number" step="0.01" id="cfgFarmMinDelay" class="bg-[#141622] border border-[#202436] rounded px-2 py-1 text-slate-100 w-16 text-center text-xs">
               <span class="text-slate-600">→</span>
-              <input type="number" step="0.01" id="cfgFarmMaxDelay" class="bg-[#141622] border border-[#202436] rounded px-2 py-1 text-slate-100 w-16 text-center">
+              <input type="number" step="0.01" id="cfgFarmMaxDelay" class="bg-[#141622] border border-[#202436] rounded px-2 py-1 text-slate-100 w-16 text-center text-xs">
             </div>
           </div>
-          <p class="text-[11px] text-amber-400">⚠️ Delay thấp = đánh nhanh nhưng dễ bị nghi hack</p>
+          <p class="text-[11px] text-emerald-400 font-medium">✨ Auto Cooldown: Cầm Kiếm tự lock delay ≥0.625s, Cầm Rìu tự lock delay ≥1.0s (100% Full Max Dame & Sweep!)</p>
           <div class="flex items-center justify-between">
             <label class="text-slate-400">Chế độ đánh:</label>
             <select id="cfgAttackMode" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-slate-100">
@@ -551,10 +551,10 @@
   <!-- ── APPLICATION JAVASCRIPT ── -->
   <script>
     const FARM_PRESETS = {
-      "Cực nhanh": [0.10, 0.15],
-      "Nhanh": [0.25, 0.40],
-      "Vừa": [0.50, 0.80],
-      "Chậm": [1.00, 1.50]
+      "⚔️ Kiếm Max Dame (0.63 - 0.80s)": [0.63, 0.80],
+      "🪓 Rìu Max Dame (1.00 - 1.25s)": [1.00, 1.25],
+      "⚡ Tốc độ cao (0.50 - 0.80s)": [0.50, 0.80],
+      "🐢 Chậm an toàn (1.20 - 1.60s)": [1.20, 1.60]
     };
 
     const MC_COLORS = {
@@ -926,21 +926,6 @@
             bots[name].ip = st.current_ip;
             bots[name].current_ip = st.current_ip;
           }
-
-          // 24/7 AUTO-RESUME: Chỉ tự động bật lại nếu đang chạy VÀ KHÔNG BỊ BẤM DỪNG
-          if (runningSet.has(name) && !stoppedSet.has(name) && !st.running) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              const b = bots[name] || {};
-              const s = b.settings || {};
-              ws.send(JSON.stringify({
-                action: 'start_bot',
-                username: name,
-                password: '',
-                settings: s
-              }));
-              appendLog(name, `🔄 [24/7] Tự động kết nối lại cho [${name}] sau khi server bảo trì/cập nhật...`, '#10b981');
-            }
-          }
         }
         scheduleRenderBots();
         updateSelectedUI();
@@ -971,7 +956,7 @@
               }));
             }
           } else {
-            // 2. Server đã có account nhưng mất password hoặc settings do Render container vừa deploy lại
+            // 2. Server đã có account nhưng mất password hoặc proxy credentials do Render container vừa deploy lại
             const srv = serverMap.get(uname);
             const srvProxy = (srv.settings && srv.settings.proxy) || {};
             const locProxy = (loc.settings && loc.settings.proxy) || {};
@@ -987,15 +972,24 @@
               }
             }
 
-            // Khôi phục cấu hình tùy chỉnh & Proxy từ client lên container mới
-            if (loc.settings && ws && ws.readyState === WebSocket.OPEN) {
-              const mergedProxy = Object.assign({}, srvProxy, locProxy);
+            // Chỉ gửi cập nhật nếu server thật sự thiếu thông tin proxy user/pass (tránh lặp vô hạn)
+            const locUser = locProxy.user || locProxy.username || '';
+            const locPass = locProxy.pass || locProxy.password || '';
+            const srvUser = srvProxy.user || srvProxy.username || '';
+            const srvPass = srvProxy.pass || srvProxy.password || '';
+            if ((locUser && !srvUser) || (locPass && !srvPass)) {
+              const mergedProxy = Object.assign({}, srvProxy, locProxy, {
+                user: locUser, username: locUser,
+                pass: locPass, password: locPass
+              });
               const mergedSettings = Object.assign({}, srv.settings || {}, loc.settings || {}, { proxy: mergedProxy });
-              ws.send(JSON.stringify({
-                action: 'update_settings',
-                username: uname,
-                ...mergedSettings
-              }));
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  action: 'update_settings',
+                  username: uname,
+                  ...mergedSettings
+                }));
+              }
             }
           }
         }
@@ -1677,8 +1671,8 @@
           password: pwd,
           farm_range: s.farm_range !== undefined ? s.farm_range : 4.0,
           farm_radius: s.farm_radius !== undefined ? s.farm_radius : 20.0,
-          farm_min_delay: s.farm_min_delay !== undefined ? s.farm_min_delay : 0.5,
-          farm_max_delay: s.farm_max_delay !== undefined ? s.farm_max_delay : 0.8,
+          farm_min_delay: s.farm_min_delay !== undefined ? s.farm_min_delay : 0.63,
+          farm_max_delay: s.farm_max_delay !== undefined ? s.farm_max_delay : 0.80,
           farm_smart_aim: s.farm_smart_aim || false,
           farm_lookat: s.farm_lookat !== undefined ? s.farm_lookat : true,
           afk_persist: s.afk_persist || false,
@@ -1918,8 +1912,8 @@
       document.getElementById('cfgFarmRange').value = s.farm_range !== undefined ? s.farm_range : 2.9;
       document.getElementById('cfgFarmRadius').value = s.farm_radius !== undefined ? s.farm_radius : 20.0;
 
-      const minD = s.farm_min_delay !== undefined ? s.farm_min_delay : 0.5;
-      const maxD = s.farm_max_delay !== undefined ? s.farm_max_delay : 0.8;
+      const minD = s.farm_min_delay !== undefined ? s.farm_min_delay : 0.63;
+      const maxD = s.farm_max_delay !== undefined ? s.farm_max_delay : 0.80;
       document.getElementById('cfgFarmMinDelay').value = minD;
       document.getElementById('cfgFarmMaxDelay').value = maxD;
 
