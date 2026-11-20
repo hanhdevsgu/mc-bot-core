@@ -16,13 +16,12 @@ function getAdminConfig() {
             return JSON.parse(fs.readFileSync(ADMIN_CONFIG_FILE, 'utf-8'));
         }
     } catch (e) {}
-    if (process.env.ADMIN_PASSWORD) {
-        const hash = bcrypt.hashSync(String(process.env.ADMIN_PASSWORD).trim(), 10);
-        const cfg = { username: 'admin', password_hash: hash, created_at: new Date().toISOString() };
-        try { fs.writeFileSync(ADMIN_CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8'); } catch(e) {}
-        return cfg;
-    }
-    return null;
+    // Mật khẩu mặc định là biến ADMIN_PASSWORD trên Render hoặc mặc định tandat2804
+    const adminPass = process.env.ADMIN_PASSWORD || 'tandat2804';
+    const hash = bcrypt.hashSync(String(adminPass).trim(), 10);
+    const cfg = { username: 'admin', password_hash: hash, created_at: new Date().toISOString() };
+    try { fs.writeFileSync(ADMIN_CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8'); } catch(e) {}
+    return cfg;
 }
 
 function saveAdminConfig(cfg) {
