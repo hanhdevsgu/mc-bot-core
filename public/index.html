@@ -1653,7 +1653,7 @@
       document.getElementById('chkHideChat').checked = savedHideChat;
     }
 
-    if (savedBotPref && savedBotPref !== '__all__') {
+    if (savedBotPref && savedBotPref !== '__all__' && bots[savedBotPref]) {
       selectedBot = savedBotPref;
       const badge = document.getElementById('activeBotBadge');
       if (badge) {
@@ -1664,10 +1664,11 @@
       if (chatInp) {
         chatInp.placeholder = `[${selectedBot}] CHAT (gửi tin nhắn / lệnh trong game: /login, /home, /vs...)`;
       }
-      const iconEl = document.getElementById('botDropdownIcon');
-      const labelEl = document.getElementById('botDropdownLabel');
-      if (iconEl) iconEl.innerText = '🤖';
-      if (labelEl) labelEl.innerText = selectedBot;
+      updateDropdown();
+    } else {
+      selectedBot = null;
+      localStorage.removeItem('mc_bot_selected');
+      updateDropdown();
     }
 
     initWs();
