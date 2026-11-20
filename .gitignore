@@ -11,3 +11,5 @@ __pycache__/
 .playwright-mcp/
 
 _chat_history.json
+sessions/*.json
+
