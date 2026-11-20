@@ -533,8 +533,24 @@ function sendBotCommand(username, command, data) {
 }
 
 const wsClients = new Set();
+const MAX_HISTORY_LOGS = 600;
+const logHistory = [];
+
+function addLogHistory(msg, color) {
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    logHistory.push({ time, msg, color });
+    if (logHistory.length > MAX_HISTORY_LOGS) {
+        logHistory.shift();
+    }
+}
 
 function sendToPython(type, ...args) {
+    if (type === 'log') {
+        const msg = args[0] || '';
+        const color = args[1] || '#8b949e';
+        addLogHistory(msg, color);
+    }
     const payload = JSON.stringify({ type, args });
     for (const ws of wsClients) {
         if (ws.readyState === WebSocket.OPEN) {
@@ -646,6 +662,7 @@ function startWsServer() {
         try {
             ws.send(JSON.stringify({ type: 'all_status', args: [getAllStatuses()] }));
             ws.send(JSON.stringify({ type: 'saved_accounts', args: [listSavedSessions()] }));
+            ws.send(JSON.stringify({ type: 'chat_history', args: [logHistory] }));
         } catch (e) {}
 
         ws.on('message', (message) => {
@@ -911,7 +928,22 @@ function startWsServer() {
                                 });
                                 saveRunningState();
                             }
+                            let s = loadSession(username);
+                            if (s) {
+                                const definedOnly = Object.fromEntries(
+                                    Object.entries(newSettings).filter(([, v]) => v !== undefined)
+                                );
+                                s.settings = Object.assign(s.settings || {}, definedOnly);
+                                saveSession(username, s);
+                            }
+                            sendToPython('saved_accounts', listSavedSessions());
+                            sendToPython('all_status', getAllStatuses());
                         }
+                        break;
+
+                    case 'clear_chat':
+                        logHistory.length = 0;
+                        sendToPython('chat_cleared');
                         break;
 
                     case 'get_status':

@@ -1060,6 +1060,17 @@
       };
     }
 
+    let renderBotsScheduled = false;
+    function scheduleRenderBots() {
+      if (!renderBotsScheduled) {
+        renderBotsScheduled = true;
+        requestAnimationFrame(() => {
+          renderBotsScheduled = false;
+          renderBots();
+        });
+      }
+    }
+
     function onMessageReceived(data) {
       const { type, args = [] } = data;
 
@@ -1069,7 +1080,7 @@
           if (!bots[name]) bots[name] = {};
           Object.assign(bots[name], st);
         }
-        renderBots();
+        scheduleRenderBots();
         updateSelectedUI();
       } else if (type === 'saved_accounts') {
         savedAccounts = args[0] || [];
@@ -1078,18 +1089,23 @@
           bots[acc.username].settings = acc.settings || {};
           bots[acc.username].password = acc.savedPassword || '';
         }
-        renderBots();
+        scheduleRenderBots();
         updateDropdown();
       } else if (type === 'status') {
         const [username, st] = args;
         if (!bots[username]) bots[username] = {};
         Object.assign(bots[username], st);
-        renderBots();
+        scheduleRenderBots();
         if (selectedBot === username) updateSelectedUI();
       } else if (type === 'log') {
         const msg = args[0] || '';
         const color = args[1] || '#8b949e';
         appendLog(null, msg, color);
+      } else if (type === 'chat_history') {
+        const history = args[0] || [];
+        renderChatHistory(history);
+      } else if (type === 'chat_cleared') {
+        document.getElementById('chatBody').innerHTML = '';
       } else if (type === 'ip') {
         const [username, ip] = args;
         if (bots[username]) bots[username].ip = ip;
@@ -1097,7 +1113,7 @@
           document.getElementById('topIp').innerText = ip || '14.233.168.230';
           document.getElementById('centerIpBanner').innerHTML = `<span>🌐 ${ip || '14.233.168.230'}</span>`;
         }
-        renderBots();
+        scheduleRenderBots();
       } else if (type === 'item') {
         const [username, item] = args;
         if (bots[username]) bots[username].item = item;
@@ -1107,28 +1123,75 @@
       }
     }
 
-    // LOGGING
-    function appendLog(tag, msg, color) {
+    // LOGGING & BATCH RENDER (TỐI ƯU HOÁ CHỐNG LAG KHI CHẠY NHIỀU BOT)
+    const MAX_DOM_LINES = 500;
+    let logQueue = [];
+    let renderTimer = null;
+
+    function appendLog(tag, msg, color, timestamp) {
       const isDebug = msg.toLowerCase().includes('debug') || msg.includes('📐') || msg.includes('🎯');
       const isPlayerChat = msg.includes('<') && msg.includes('>');
 
       if (document.getElementById('chkHideDebug').checked && isDebug) return;
       if (document.getElementById('chkHideChat').checked && isPlayerChat) return;
 
-      const body = document.getElementById('chatBody');
       const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+      const timeStr = timestamp || `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
 
-      const line = document.createElement('div');
-      line.style.display = 'flex';
-      line.style.gap = '8px';
-      line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${timeStr}</span><span style="color:${color || '#fff'}; flex:1; word-break:break-word;">${escapeHtml(msg)}</span>`;
-      body.appendChild(line);
+      logQueue.push({ timeStr, msg, color: color || '#fff' });
+
+      if (!renderTimer) {
+        renderTimer = requestAnimationFrame(flushLogQueue);
+      }
+    }
+
+    function flushLogQueue() {
+      renderTimer = null;
+      if (logQueue.length === 0) return;
+
+      const body = document.getElementById('chatBody');
+      const frag = document.createDocumentFragment();
+
+      for (const item of logQueue) {
+        const line = document.createElement('div');
+        line.style.display = 'flex';
+        line.style.gap = '8px';
+        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.timeStr}</span><span style="color:${item.color}; flex:1; word-break:break-word;">${escapeHtml(item.msg)}</span>`;
+        frag.appendChild(line);
+      }
+      logQueue = [];
+      body.appendChild(frag);
+
+      // Cắt tỉa DOM để không bao giờ bị tràn RAM hoặc giật lag trình duyệt khi treo nhiều acc:
+      while (body.children.length > MAX_DOM_LINES) {
+        body.removeChild(body.firstChild);
+      }
+
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function renderChatHistory(history) {
+      const body = document.getElementById('chatBody');
+      body.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      const recent = history.slice(-MAX_DOM_LINES);
+
+      for (const item of recent) {
+        const line = document.createElement('div');
+        line.style.display = 'flex';
+        line.style.gap = '8px';
+        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.time || ''}</span><span style="color:${item.color || '#fff'}; flex:1; word-break:break-word;">${escapeHtml(item.msg)}</span>`;
+        frag.appendChild(line);
+      }
+      body.appendChild(frag);
       body.scrollTop = body.scrollHeight;
     }
 
     function clearChat() {
       document.getElementById('chatBody').innerHTML = '';
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'clear_chat' }));
+      }
     }
 
     function escapeHtml(s) {
