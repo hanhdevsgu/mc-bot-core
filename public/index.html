@@ -203,6 +203,33 @@
       color: #fff;
       border-color: var(--border-medium);
     }
+    .chat-scope-tabs {
+      display: flex;
+      background: #060911;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      padding: 2px;
+      gap: 2px;
+    }
+    .chat-scope-btn {
+      background: transparent;
+      color: var(--text-dim);
+      border: none;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chat-scope-btn:hover {
+      color: #fff;
+    }
+    .chat-scope-btn.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
     .console-stream {
       flex: 1;
       background: #060911;
@@ -856,11 +883,18 @@
     <!-- CỘT TRÁI: CONSOLE STREAM -->
     <section class="console-pane">
       <div class="console-topbar">
-        <div class="console-ip-glow">
-          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          <span id="centerIpBanner">14.233.168.230</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="console-ip-glow">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span id="centerIpBanner">14.233.168.230</span>
+          </div>
+          <div class="chat-scope-tabs">
+            <button id="scopeAllBtn" class="chat-scope-btn active" onclick="setChatScope('all')">Tất cả log</button>
+            <button id="scopeBotBtn" class="chat-scope-btn" onclick="setChatScope('selected')">Chỉ bot đang chọn</button>
+          </div>
         </div>
-        <div style="display: flex; gap: 6px;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <span id="activeBotBadge" style="font-size: 11px; color: var(--cyan); font-weight: 700; background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.2); padding: 2px 8px; border-radius: 4px;">Tất cả bot</span>
           <button class="btn-action-ghost" onclick="clearChat()">
             <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             Xoá log
@@ -1394,6 +1428,8 @@
       }
     }
 
+    let chatScope = 'all'; // 'all' hoặc 'selected'
+
     function isMsgHidden(msg) {
       if (!msg) return false;
       const isDebugPrefix = msg.includes('📂') || msg.includes('🐞') || msg.includes('🧪') || msg.includes('📕') || msg.includes('🔄') || msg.includes('🖱️') || msg.includes('📦') || msg.includes('📏') || msg.includes('📐') || msg.includes('ℹ️');
@@ -1402,7 +1438,29 @@
 
       if (document.getElementById('chkHideDebug').checked && isDebug) return true;
       if (document.getElementById('chkHideChat').checked && isPlayerChat) return true;
+
+      // Lọc linh hoạt theo bot: nếu chọn chế độ 'Chỉ bot đang chọn'
+      if (chatScope === 'selected' && selectedBot) {
+        const m = msg.match(/^\[([^\]]+)\]/);
+        if (m && m[1] !== selectedBot) {
+          return true;
+        }
+      }
+
       return false;
+    }
+
+    function setChatScope(scope) {
+      chatScope = scope;
+      const allBtn = document.getElementById('scopeAllBtn');
+      const botBtn = document.getElementById('scopeBotBtn');
+      if (allBtn) allBtn.classList.toggle('active', scope === 'all');
+      if (botBtn) botBtn.classList.toggle('active', scope === 'selected');
+      const badge = document.getElementById('activeBotBadge');
+      if (badge) {
+        badge.innerText = scope === 'all' ? 'Tất cả bot' : (selectedBot ? `Bot: ${selectedBot}` : 'Chưa chọn bot');
+      }
+      renderChatHistory();
     }
 
     function appendLog(tag, msg, color, timestamp) {
@@ -1564,18 +1622,49 @@
     }
 
     function selectBot(name) {
+      if (!name) return;
       selectedBot = name;
       updateDropdown();
       const bot = bots[name] || {};
       const ip = bot.ip || '14.233.168.230';
       document.getElementById('topIp').innerText = ip;
       document.getElementById('centerIpBanner').innerText = ip;
+
+      const badge = document.getElementById('activeBotBadge');
+      if (badge) badge.innerText = `Bot: ${name}`;
+
+      const chatInp = document.getElementById('chatInput');
+      if (chatInp) chatInp.placeholder = `[${name}] Gửi tin nhắn hoặc lệnh (/login, /home, /tp...)`;
+
+      const botBtn = document.getElementById('scopeBotBtn');
+      if (botBtn) {
+        botBtn.innerText = `Chỉ bot: ${name}`;
+      }
+
+      // Tự động chuyển phạm vi xem sang bot này
+      chatScope = 'selected';
+      const allBtn = document.getElementById('scopeAllBtn');
+      if (allBtn) allBtn.classList.remove('active');
+      if (botBtn) botBtn.classList.add('active');
+
       renderBots();
       updateSelectedUI();
+      renderChatHistory();
     }
 
     function selectBotFromDropdown(name) {
-      if (name) selectBot(name);
+      if (!name || name === '__all__') {
+        selectedBot = null;
+        setChatScope('all');
+        const badge = document.getElementById('activeBotBadge');
+        if (badge) badge.innerText = 'Tất cả bot';
+        const chatInp = document.getElementById('chatInput');
+        if (chatInp) chatInp.placeholder = 'Gửi tin nhắn hoặc lệnh (/login, /home, /tp...)';
+        renderBots();
+        updateSelectedUI();
+      } else {
+        selectBot(name);
+      }
     }
 
     function updateDropdown() {
@@ -1585,7 +1674,8 @@
         ...Object.keys(bots)
       ])).filter(Boolean);
 
-      select.innerHTML = '<option value="">Chọn bot mục tiêu</option>' + allNames.map(n => `<option value="${n}" ${selectedBot === n ? 'selected' : ''}>${n}</option>`).join('');
+      select.innerHTML = '<option value="__all__" ' + (!selectedBot ? 'selected' : '') + '>🌐 Tất cả bot (Xem chung)</option>' +
+        allNames.map(n => `<option value="${n}" ${selectedBot === n ? 'selected' : ''}>🤖 ${n}</option>`).join('');
     }
 
     function updateSelectedUI() {
@@ -1697,7 +1787,18 @@
     }
 
     function sendChat() {
-      if (!selectedBot) { alert('Vui lòng chọn 1 bot mục tiêu!'); return; }
+      if (!selectedBot) {
+        const allNames = Array.from(new Set([
+          ...savedAccounts.map(a => a.username),
+          ...Object.keys(bots)
+        ])).filter(Boolean);
+        if (allNames.length > 0) {
+          selectBot(allNames[0]);
+        } else {
+          alert('Vui lòng tạo hoặc chọn 1 bot trước!');
+          return;
+        }
+      }
       const input = document.getElementById('chatInput');
       const msg = input.value.trim();
       if (!msg) return;
