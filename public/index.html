@@ -569,6 +569,30 @@
     // ── LOCAL STORAGE ACCOUNT PERSISTENCE & ANTI-ROLLBACK AUTHORITY ──
     
     // ── 24/7 RUNNING BOT AUTHORITY & CHAT PERSISTENCE ──
+    
+    function autoResumeActiveBots() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const runningSet = getActiveRunningBots();
+      if (runningSet.size === 0) return;
+
+      const localAccs = getLocalAccounts();
+      for (const name of runningSet) {
+        const bot = bots[name] || {};
+        if (!bot.running) {
+          const acc = localAccs[name] || {};
+          const pwd = bot.password || acc.password || '';
+          const s = bot.settings || acc.settings || {};
+          ws.send(JSON.stringify({
+            action: 'start_bot',
+            username: name,
+            password: pwd,
+            settings: s
+          }));
+          appendLog(name, `🔄 [24/7] Tự động kết nối lại cho [${name}] sau khi hệ thống cập nhật...`, '#10b981');
+        }
+      }
+    }
+
     function getActiveRunningBots() {
       try {
         const raw = localStorage.getItem('mc_active_running_bots');
@@ -718,6 +742,7 @@
         dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]';
         ws.send(JSON.stringify({ action: 'get_saved_accounts' }));
         ws.send(JSON.stringify({ action: 'get_all_status' }));
+        setTimeout(autoResumeActiveBots, 600);
       };
 
       ws.onclose = () => {
@@ -1370,13 +1395,38 @@
     }
 
     function toggleBotRun(name) {
-      const bot = bots[name] || {};
-      if (bot.running) {
+      if (!bots[name]) bots[name] = {};
+      const bot = bots[name];
+      const isCurrentlyRunning = !!bot.running;
+
+      if (isCurrentlyRunning) {
+        // INSTANT OPTIMISTIC FLIP TO STOPPED
+        bot.running = false;
         setActiveRunningBot(name, false);
+        const btnRun = document.getElementById(`btnRun_${name}`);
+        if (btnRun) {
+          btnRun.className = 'flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm bg-emerald-600 hover:bg-emerald-500 text-white';
+          btnRun.innerHTML = '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY';
+        }
+        const dotEl = document.getElementById(`stDot_${name}`);
+        if (dotEl) dotEl.className = 'w-2 h-2 rounded-full bg-slate-600 shrink-0';
+
         ws.send(JSON.stringify({ action: 'stop_bot', username: name }));
         appendLog(name, `Dừng bot [${name}]...`, '#f59e0b');
+        scheduleRenderBots();
+        updateDropdown();
       } else {
+        // INSTANT OPTIMISTIC FLIP TO RUNNING
+        bot.running = true;
         setActiveRunningBot(name, true);
+        const btnRun = document.getElementById(`btnRun_${name}`);
+        if (btnRun) {
+          btnRun.className = 'flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm bg-rose-600 hover:bg-rose-500 text-white';
+          btnRun.innerHTML = '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG';
+        }
+        const dotEl = document.getElementById(`stDot_${name}`);
+        if (dotEl) dotEl.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399] shrink-0';
+
         const s = bot.settings || {};
         const pwdInput = document.getElementById(`pwd_${name}`);
         const pwd = pwdInput ? pwdInput.value.trim() : (bot.password || '');
