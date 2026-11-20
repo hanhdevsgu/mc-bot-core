@@ -27,87 +27,106 @@ if (!fs.existsSync(SESSION_DIR)) {
 }
 
 function syncToAccountsJson(username, data) {
-    try {
-        if (!fs.existsSync(SESSION_DIR)) {
-            fs.mkdirSync(SESSION_DIR, { recursive: true });
-        }
-        const accFile = path.join(SESSION_DIR, 'accounts.json');
-        let accList = [];
-        if (fs.existsSync(accFile)) {
-            try {
-                accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
-                if (!Array.isArray(accList)) accList = [];
-            } catch (e) {
-                accList = [];
-            }
-        }
-        let found = false;
-        const entry = {
-            username: username,
-            password: data.password !== undefined ? data.password : '',
-            ...(data.settings || {})
-        };
-        for (let i = 0; i < accList.length; i++) {
-            if (accList[i] && accList[i].username === username) {
-                accList[i] = Object.assign({}, accList[i], entry);
-                if (data.password !== undefined && data.password !== '') {
-                    accList[i].password = data.password;
+    const paths = Array.from(new Set([
+        path.join(SESSION_DIR, 'accounts.json'),
+        path.join(__dirname, 'sessions', 'accounts.json')
+    ]));
+    for (const accFile of paths) {
+        try {
+            const dir = path.dirname(accFile);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            let accList = [];
+            if (fs.existsSync(accFile)) {
+                try {
+                    accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
+                    if (!Array.isArray(accList)) accList = [];
+                } catch (e) {
+                    accList = [];
                 }
-                found = true;
-                break;
             }
+            let found = false;
+            const entry = {
+                username: username,
+                password: data.password !== undefined ? data.password : '',
+                ...(data.settings || {})
+            };
+            for (let i = 0; i < accList.length; i++) {
+                if (accList[i] && accList[i].username === username) {
+                    accList[i] = Object.assign({}, accList[i], entry);
+                    if (data.password !== undefined && data.password !== '') {
+                        accList[i].password = data.password;
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                accList.push(entry);
+            }
+            fs.writeFileSync(accFile, JSON.stringify(accList, null, 2), 'utf-8');
+        } catch (e) {
+            console.error('⚠️ Lỗi syncToAccountsJson:', e);
         }
-        if (!found) {
-            accList.push(entry);
-        }
-        fs.writeFileSync(accFile, JSON.stringify(accList, null, 2), 'utf-8');
-    } catch (e) {
-        console.error('⚠️ Lỗi syncToAccountsJson:', e);
     }
 }
 
 function removeFromAccountsJson(username) {
-    try {
-        const accFile = path.join(SESSION_DIR, 'accounts.json');
-        if (fs.existsSync(accFile)) {
-            let accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
-            if (Array.isArray(accList)) {
-                accList = accList.filter(a => a && a.username !== username);
-                fs.writeFileSync(accFile, JSON.stringify(accList, null, 2), 'utf-8');
+    const paths = Array.from(new Set([
+        path.join(SESSION_DIR, 'accounts.json'),
+        path.join(__dirname, 'sessions', 'accounts.json')
+    ]));
+    for (const p of paths) {
+        try {
+            if (fs.existsSync(p)) {
+                let accList = JSON.parse(fs.readFileSync(p, 'utf-8'));
+                if (Array.isArray(accList)) {
+                    accList = accList.filter(a => a && a.username !== username);
+                    fs.writeFileSync(p, JSON.stringify(accList, null, 2), 'utf-8');
+                }
             }
-        }
-    } catch (e) {}
+        } catch (e) {}
+    }
 }
 
 function loadSession(username) {
-    const file = path.join(SESSION_DIR, `${username}.json`);
-    if (fs.existsSync(file)) {
-        try {
-            return JSON.parse(fs.readFileSync(file, 'utf-8'));
-        } catch (e) {}
+    const paths = [
+        path.join(SESSION_DIR, `${username}.json`),
+        path.join(__dirname, 'sessions', `${username}.json`)
+    ];
+    for (const file of paths) {
+        if (fs.existsSync(file)) {
+            try {
+                return JSON.parse(fs.readFileSync(file, 'utf-8'));
+            } catch (e) {}
+        }
     }
     // Fallback: search accounts.json
-    try {
-        const accFile = path.join(SESSION_DIR, 'accounts.json');
-        if (fs.existsSync(accFile)) {
-            const accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
-            if (Array.isArray(accList)) {
-                const found = accList.find(a => a && a.username === username);
-                if (found) {
-                    return createSession(username, found.password, found);
+    for (const dir of [SESSION_DIR, path.join(__dirname, 'sessions')]) {
+        try {
+            const accFile = path.join(dir, 'accounts.json');
+            if (fs.existsSync(accFile)) {
+                const accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
+                if (Array.isArray(accList)) {
+                    const found = accList.find(a => a && a.username === username);
+                    if (found) {
+                        return createSession(username, found.password, found);
+                    }
                 }
             }
-        }
-    } catch (e) {}
+        } catch (e) {}
+    }
     return null;
 }
 
 function saveSession(username, data) {
-    if (!fs.existsSync(SESSION_DIR)) {
-        fs.mkdirSync(SESSION_DIR, { recursive: true });
+    const dirs = Array.from(new Set([SESSION_DIR, path.join(__dirname, 'sessions')]));
+    for (const d of dirs) {
+        try {
+            if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+            const file = path.join(d, `${username}.json`);
+            fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+        } catch (e) {}
     }
-    const file = path.join(SESSION_DIR, `${username}.json`);
-    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
     syncToAccountsJson(username, data);
 }
 
@@ -640,49 +659,51 @@ function sendToPython(type, ...args) {
 
 function listSavedSessions() {
     try {
-        if (!fs.existsSync(SESSION_DIR)) return [];
-        const files = fs.readdirSync(SESSION_DIR);
-        const accounts = [];
-        const seen = new Set();
+        const dirs = Array.from(new Set([SESSION_DIR, path.join(__dirname, 'sessions')])).filter(d => fs.existsSync(d));
+        const accountsMap = new Map();
 
-        const accFile = path.join(SESSION_DIR, 'accounts.json');
-        if (fs.existsSync(accFile)) {
-            try {
-                const accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
-                if (Array.isArray(accList)) {
-                    for (const a of accList) {
-                        if (a && a.username) {
-                            seen.add(a.username);
-                            accounts.push({
-                                username: a.username,
-                                settings: a,
-                                savedPassword: a.password || ''
-                            });
+        for (const dir of dirs) {
+            const accFile = path.join(dir, 'accounts.json');
+            if (fs.existsSync(accFile)) {
+                try {
+                    const accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
+                    if (Array.isArray(accList)) {
+                        for (const a of accList) {
+                            if (a && a.username) {
+                                if (!accountsMap.has(a.username) || (a.password && !accountsMap.get(a.username).savedPassword)) {
+                                    accountsMap.set(a.username, {
+                                        username: a.username,
+                                        settings: a,
+                                        savedPassword: a.password || ''
+                                    });
+                                }
+                            }
                         }
+                    }
+                } catch (e) {}
+            }
+
+            try {
+                const files = fs.readdirSync(dir);
+                for (const f of files) {
+                    if (f.endsWith('.json') && !f.startsWith('_') && f !== 'accounts.json') {
+                        const username = f.replace('.json', '');
+                        try {
+                            const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
+                            const existing = accountsMap.get(username);
+                            const pwd = data.password || (existing ? existing.savedPassword : '') || '';
+                            const st = data.settings || (existing ? existing.settings : {}) || {};
+                            accountsMap.set(username, {
+                                username,
+                                settings: st,
+                                savedPassword: pwd
+                            });
+                        } catch (e) {}
                     }
                 }
             } catch (e) {}
         }
-
-        for (const f of files) {
-            if (f.endsWith('.json') && !f.startsWith('_') && f !== 'accounts.json') {
-                const username = f.replace('.json', '');
-                if (!seen.has(username)) {
-                    seen.add(username);
-                    try {
-                        const data = JSON.parse(fs.readFileSync(path.join(SESSION_DIR, f), 'utf-8'));
-                        accounts.push({
-                            username,
-                            settings: data.settings || {},
-                            savedPassword: data.password || ''
-                        });
-                    } catch (e) {
-                        accounts.push({ username, settings: {}, savedPassword: '' });
-                    }
-                }
-            }
-        }
-        return accounts;
+        return Array.from(accountsMap.values());
     } catch (e) {
         return [];
     }
@@ -696,7 +717,8 @@ function getAllStatuses() {
             anti_afk: bot.anti_afk_running,
             auto_farm: bot.auto_farm_running,
             auto_storage: bot.auto_storage_running,
-            current_ip: bot.current_ip
+            current_ip: bot.current_ip,
+            password: bot.password || ''
         };
     }
     return statuses;
@@ -1111,8 +1133,10 @@ function startWsServer() {
                             if (bots[username] && bots[username].running) {
                                 stopBot(username);
                             }
-                            const file = path.join(SESSION_DIR, `${username}.json`);
-                            try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (e) {}
+                            const file1 = path.join(SESSION_DIR, `${username}.json`);
+                            const file2 = path.join(__dirname, 'sessions', `${username}.json`);
+                            try { if (fs.existsSync(file1)) fs.unlinkSync(file1); } catch (e) {}
+                            try { if (fs.existsSync(file2)) fs.unlinkSync(file2); } catch (e) {}
                             removeFromAccountsJson(username);
                             delete bots[username];
                             sendToPython('saved_accounts', listSavedSessions());

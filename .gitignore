@@ -5,3 +5,5 @@ _running_state.json
 
 __pycache__/
 *.pyc
+
+.playwright-mcp/
