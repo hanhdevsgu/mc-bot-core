@@ -1,4 +1,4 @@
-﻿const WebSocket = require('ws');
+const WebSocket = require('ws');
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
