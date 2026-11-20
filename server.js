@@ -304,12 +304,17 @@ function startBot(username, password, opts = {}) {
 
     botProcesses[username] = botProcess;
 
+    const initialProxyIp = (effectiveSettings.proxy && effectiveSettings.proxy.enabled !== false && effectiveSettings.proxy.host)
+        ? String(effectiveSettings.proxy.host).trim()
+        : 'Chưa kết nối';
+
     bots[username] = {
         username: username,
         password: password,
         process: botProcess,
         running: true,
-        current_ip: 'Chưa kết nối',
+        current_ip: initialProxyIp,
+        ip: initialProxyIp,
         anti_afk_running: false,
         auto_farm_running: false,
         auto_storage_running: false,
@@ -718,12 +723,18 @@ function listSavedSessions() {
 function getAllStatuses() {
     const statuses = {};
     for (const [name, bot] of Object.entries(bots)) {
+        const botProxy = (bot.settings && bot.settings.proxy && bot.settings.proxy.enabled !== false && bot.settings.proxy.host)
+            ? bot.settings.proxy
+            : null;
+        const displayIp = bot.current_ip || (botProxy ? botProxy.host : 'Chưa kết nối');
         statuses[name] = {
             running: bot.running,
             anti_afk: bot.anti_afk_running,
             auto_farm: bot.auto_farm_running,
             auto_storage: bot.auto_storage_running,
-            current_ip: bot.current_ip,
+            current_ip: displayIp,
+            ip: displayIp,
+            proxy: botProxy,
             item: bot.item || 'Tay không (Trống)',
             password: bot.password || ''
         };

@@ -100,7 +100,7 @@
           <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
         </svg>
-        <span id="topIp">14.233.168.230</span>
+        <span id="topIp">Chưa kết nối</span>
       </div>
       <div id="connDot" class="w-2.5 h-2.5 rounded-full bg-rose-500 transition-all duration-300" title="Trạng thái WebSocket Server"></div>
     </div>
@@ -722,6 +722,10 @@
         for (const [name, st] of Object.entries(statuses)) {
           if (!bots[name]) bots[name] = {};
           Object.assign(bots[name], st);
+          if (st.current_ip) {
+            bots[name].ip = st.current_ip;
+            bots[name].current_ip = st.current_ip;
+          }
         }
         scheduleRenderBots();
         updateSelectedUI();
@@ -852,7 +856,7 @@
         const [username, ip] = args;
         if (bots[username]) bots[username].ip = ip;
         if (selectedBot === username) {
-          document.getElementById('topIp').innerText = ip || '14.233.168.230';
+          document.getElementById('topIp').innerText = ip || 'Chưa kết nối';
         }
         scheduleRenderBots();
       } else if (type === 'item') {
@@ -970,7 +974,10 @@
       filtered.forEach(name => {
         const bot = bots[name] || {};
         const isRunning = !!bot.running;
-        const currentIp = bot.ip || '14.233.168.230';
+        const botProxy = (bot.settings && bot.settings.proxy && bot.settings.proxy.enabled !== false && bot.settings.proxy.host)
+          ? bot.settings.proxy
+          : null;
+        const currentIp = bot.ip || bot.current_ip || (botProxy ? botProxy.host : (isRunning ? 'Đang kết nối...' : 'Chưa kết nối'));
         const isSelected = selectedBot === name;
         const savedPwd = bot.password || '';
 
@@ -1115,7 +1122,10 @@
       
       updateDropdown();
       const bot = (selectedBot && bots[selectedBot]) ? bots[selectedBot] : {};
-      const ip = bot.ip || '14.233.168.230';
+      const botProxy = (bot.settings && bot.settings.proxy && bot.settings.proxy.enabled !== false && bot.settings.proxy.host)
+        ? bot.settings.proxy
+        : null;
+      const ip = bot.ip || bot.current_ip || (botProxy ? botProxy.host : (bot.running ? 'Đang kết nối...' : 'Chưa kết nối'));
       document.getElementById('topIp').innerText = ip;
 
       const badge = document.getElementById('activeBotBadge');

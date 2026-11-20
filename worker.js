@@ -556,19 +556,28 @@ class BotInstance {
                     const { SocksClient } = require('socks');
                     const tls = require('tls');
                     const proxy = this.proxy;
+                    const proxyUser = (proxy.user && typeof proxy.user === 'string' && proxy.user.trim()) ? proxy.user.trim() : undefined;
+                    const proxyPass = (proxy.pass && typeof proxy.pass === 'string' && proxy.pass.trim()) ? proxy.pass.trim() : (proxyUser ? '' : undefined);
+
+                    const proxyCfg = {
+                        host: String(proxy.host).trim(),
+                        port: parseInt(proxy.port, 10),
+                        type: proxy.type || 5
+                    };
+                    if (proxyUser) {
+                        proxyCfg.userId = proxyUser;
+                        proxyCfg.password = proxyPass !== undefined ? proxyPass : '';
+                    }
 
                     SocksClient.createConnection({
-                        proxy: {
-                            host: String(proxy.host).trim(),
-                            port: parseInt(proxy.port, 10),
-                            type: proxy.type || 5,
-                            userId: proxyUser,
-                            password: proxyPass,
-                        },
+                        proxy: proxyCfg,
                         command: 'connect',
                         destination: { host: 'api.ipify.org', port: 443 },
                     }, (err, info) => {
-                        if (err || !info || !info.socket) { finish(null); return; }
+                        if (err || !info || !info.socket) {
+                            finish(String(proxy.host).trim());
+                            return;
+                        }
 
                         let socket;
                         try {
@@ -579,21 +588,21 @@ class BotInstance {
                                 socket.write('GET / HTTP/1.1\r\nHost: api.ipify.org\r\nConnection: close\r\n\r\n');
                             });
                         } catch (e) {
-                            finish(null);
+                            finish(String(proxy.host).trim());
                             return;
                         }
 
                         let raw = '';
-                        socket.setTimeout(10000, () => { socket.destroy(); finish(null); });
+                        socket.setTimeout(8000, () => { socket.destroy(); finish(String(proxy.host).trim()); });
                         socket.on('data', (chunk) => { raw += chunk.toString(); });
-                        socket.on('error', () => finish(null));
+                        socket.on('error', () => finish(String(proxy.host).trim()));
                         socket.on('close', () => {
                             const body = raw.split('\r\n\r\n').slice(1).join('\r\n\r\n').trim();
-                            finish(body || null);
+                            finish(body || String(proxy.host).trim());
                         });
                     });
                 } catch (e) {
-                    finish(null);
+                    finish(this.proxy && this.proxy.host ? String(this.proxy.host).trim() : null);
                 }
             } else {
                 const https = require('https');
@@ -2580,6 +2589,7 @@ class BotInstance {
                 });
             };
 
+            this.sendIP(String(proxy.host).trim());
             this.log(`🌐 Đang kết nối qua proxy ${proxy.host}:${proxy.port}...`, '#f5c842');
         }
 
