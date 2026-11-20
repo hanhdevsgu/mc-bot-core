@@ -654,12 +654,47 @@ function addLogHistory(msg, color) {
     }
 }
 
+let logBatchQueue = [];
+let logBatchTimer = null;
+
+function flushLogBatch() {
+    logBatchTimer = null;
+    if (logBatchQueue.length === 0) return;
+    const batch = logBatchQueue;
+    logBatchQueue = [];
+
+    if (batch.length === 1) {
+        const payload = JSON.stringify({ type: 'log', args: [batch[0].msg, batch[0].color, batch[0].timeStr] });
+        for (const ws of wsClients) {
+            if (ws.readyState === WebSocket.OPEN) {
+                try { ws.send(payload); } catch (e) {}
+            }
+        }
+    } else {
+        const payload = JSON.stringify({ type: 'logs_batch', args: [batch] });
+        for (const ws of wsClients) {
+            if (ws.readyState === WebSocket.OPEN) {
+                try { ws.send(payload); } catch (e) {}
+            }
+        }
+    }
+}
+
 function sendToPython(type, ...args) {
     if (type === 'log') {
         const msg = args[0] || '';
         const color = args[1] || '#8b949e';
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
         addLogHistory(msg, color);
+
+        logBatchQueue.push({ msg, color, timeStr });
+        if (!logBatchTimer) {
+            logBatchTimer = setTimeout(flushLogBatch, 40);
+        }
+        return;
     }
+
     const payload = JSON.stringify({ type, args });
     for (const ws of wsClients) {
         if (ws.readyState === WebSocket.OPEN) {

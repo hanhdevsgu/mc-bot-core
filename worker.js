@@ -85,7 +85,7 @@ class BotInstance {
         this._maxConsecutiveMissTimeouts = settings.farm_max_consecutive_miss !== undefined
             ? settings.farm_max_consecutive_miss : 4;
 
-        this.farm_debug = settings.farm_debug !== undefined ? settings.farm_debug : true;
+        this.farm_debug = settings.farm_debug !== undefined ? settings.farm_debug : false;
 
         this.farm_smart_aim = false;
         this.farm_lookat = settings.farm_lookat !== undefined ? settings.farm_lookat : true;

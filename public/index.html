@@ -134,7 +134,7 @@
 
       <!-- CHAT INPUT BAR -->
       <div class="h-11 bg-[#141622] border-t border-[#1d2130] px-3 flex items-center gap-2 shrink-0">
-        <input type="text" id="chatInput" placeholder="CHAT (gửi tin nhắn / lệnh trong game: /login, /home, /vs...)" 
+        <input type="text" id="chatInput" placeholder="Nhập tin nhắn hoặc lệnh..." 
                class="flex-1 bg-[#0a0b10] border border-[#202436] rounded-md px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 font-mono outline-none focus:border-indigo-500 transition select-text"
                onkeydown="if(event.key==='Enter') sendChat()">
         <button onclick="sendChat()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-1.5 rounded-md flex items-center gap-1.5 transition shrink-0 shadow">
@@ -559,7 +559,7 @@
     let savedAccounts = [];
     let currentModalBot = null;
 
-    const MAX_DOM_LINES = 500;
+    const MAX_DOM_LINES = 300;
     let allChatHistory = [];
     let logQueue = [];
     let renderTimer = null;
@@ -567,6 +567,42 @@
     let pwdDebounceTimers = {};
 
     // ── LOCAL STORAGE ACCOUNT PERSISTENCE & ANTI-ROLLBACK AUTHORITY ──
+    
+    // ── 24/7 RUNNING BOT AUTHORITY & CHAT PERSISTENCE ──
+    function getActiveRunningBots() {
+      try {
+        const raw = localStorage.getItem('mc_active_running_bots');
+        return new Set(raw ? JSON.parse(raw) : []);
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function setActiveRunningBot(name, isRunning) {
+      try {
+        const set = getActiveRunningBots();
+        if (isRunning) set.add(name);
+        else set.delete(name);
+        localStorage.setItem('mc_active_running_bots', JSON.stringify(Array.from(set)));
+      } catch (e) {}
+    }
+
+    function getLocalChat() {
+      try {
+        const raw = localStorage.getItem('mc_local_chat_history');
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveLocalChat(history) {
+      try {
+        const recent = (history || []).slice(-300);
+        localStorage.setItem('mc_local_chat_history', JSON.stringify(recent));
+      } catch (e) {}
+    }
+
     function getLocalAccounts() {
       try {
         const raw = localStorage.getItem('mc_user_saved_accounts');
@@ -719,12 +755,29 @@
 
       if (type === 'all_status') {
         const statuses = args[0] || {};
+        const runningSet = getActiveRunningBots();
+
         for (const [name, st] of Object.entries(statuses)) {
           if (!bots[name]) bots[name] = {};
           Object.assign(bots[name], st);
           if (st.current_ip) {
             bots[name].ip = st.current_ip;
             bots[name].current_ip = st.current_ip;
+          }
+
+          // 24/7 AUTO-RESUME: Nếu bot đang trong danh sách chạy nhưng server vừa restart -> tự động kích hoạt chạy lại 100%!
+          if (runningSet.has(name) && !st.running) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              const b = bots[name] || {};
+              const s = b.settings || {};
+              ws.send(JSON.stringify({
+                action: 'start_bot',
+                username: name,
+                password: b.password || '',
+                settings: s
+              }));
+              appendLog(name, `🔄 [24/7] Tự động kết nối lại cho [${name}] sau khi server bảo trì/cập nhật...`, '#10b981');
+            }
           }
         }
         scheduleRenderBots();
@@ -836,19 +889,42 @@
         Object.assign(bots[username], st);
         scheduleRenderBots();
         if (selectedBot === username) updateSelectedUI();
+      } else if (type === 'logs_batch') {
+        const batch = args[0] || [];
+        for (const item of batch) {
+          allChatHistory.push({ time: item.timeStr, msg: item.msg, color: item.color });
+          appendLog(null, item.msg, item.color, item.timeStr);
+        }
+        if (allChatHistory.length > MAX_DOM_LINES * 2) {
+          allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
+        }
       } else if (type === 'log') {
         const msg = args[0] || '';
         const color = args[1] || '#94a3b8';
         const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        const timeStr = args[2] || `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
         allChatHistory.push({ time: timeStr, msg, color });
         if (allChatHistory.length > MAX_DOM_LINES * 2) {
-          allChatHistory.shift();
+          allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
         }
         appendLog(null, msg, color, timeStr);
       } else if (type === 'chat_history') {
-        allChatHistory = (args[0] || []).slice();
+        const srvHistory = args[0] || [];
+        if (srvHistory.length > 0) {
+          const existingKeys = new Set(allChatHistory.map(item => `${item.time || ''}_${item.msg}`));
+          for (const item of srvHistory) {
+            const key = `${item.time || ''}_${item.msg}`;
+            if (!existingKeys.has(key)) {
+              allChatHistory.push(item);
+              existingKeys.add(key);
+            }
+          }
+        }
+        if (allChatHistory.length > MAX_DOM_LINES * 2) {
+          allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
+        }
         renderChatHistory(allChatHistory);
+        saveLocalChat(allChatHistory);
       } else if (type === 'chat_cleared') {
         allChatHistory = [];
         document.getElementById('chatBody').innerHTML = '';
@@ -869,26 +945,26 @@
       }
     }
 
+    let renderBotsTimer = null;
     function scheduleRenderBots() {
-      if (!renderBotsScheduled) {
-        renderBotsScheduled = true;
-        requestAnimationFrame(() => {
-          renderBotsScheduled = false;
-          renderBots();
-        });
+      if (!renderBotsTimer) {
+        renderBotsTimer = setTimeout(() => {
+          renderBotsTimer = null;
+          requestAnimationFrame(renderBots);
+        }, 100);
       }
     }
 
     function appendLog(tag, msg, color, timestamp) {
-      if (isMsgHidden(msg)) return;
-
       const now = new Date();
       const timeStr = timestamp || `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
 
-      logQueue.push({ timeStr, msg, color: color || '#f1f5f9' });
-
-      if (!renderTimer) {
-        renderTimer = requestAnimationFrame(flushLogQueue);
+      // Save to local storage asynchronously
+      if (!isMsgHidden(msg)) {
+        logQueue.push({ timeStr, msg, color: color || '#f1f5f9' });
+        if (!renderTimer) {
+          renderTimer = requestAnimationFrame(flushLogQueue);
+        }
       }
     }
 
@@ -907,11 +983,19 @@
       }
       logQueue = [];
       body.appendChild(frag);
+      saveLocalChat(allChatHistory);
 
-      while (body.children.length > MAX_DOM_LINES) {
-        body.removeChild(body.firstChild);
+      const excess = body.children.length - MAX_DOM_LINES;
+      if (excess > 0) {
+        for (let i = 0; i < excess; i++) {
+          body.removeChild(body.firstChild);
+        }
       }
-      body.scrollTop = body.scrollHeight;
+      // Smart scroll: only auto-scroll if user is already near bottom (avoids scroll lag)
+      const isNearBottom = body.scrollHeight - body.clientHeight <= body.scrollTop + 60;
+      if (isNearBottom) {
+        body.scrollTop = body.scrollHeight;
+      }
     }
 
     function renderChatHistory(history) {
@@ -1139,8 +1223,8 @@
       const chatInp = document.getElementById('chatInput');
       if (chatInp) {
         chatInp.placeholder = selectedBot 
-          ? `[${selectedBot}] CHAT (gửi tin nhắn / lệnh trong game: /login, /home, /vs...)`
-          : 'CHAT (gửi tin nhắn / lệnh trong game: /login, /home, /vs...)';
+          ? `Nhập lệnh / chat cho ${selectedBot}...`
+          : 'Nhập tin nhắn hoặc lệnh...';
       }
 
       renderBots();
@@ -1301,9 +1385,11 @@
     function toggleBotRun(name) {
       const bot = bots[name] || {};
       if (bot.running) {
+        setActiveRunningBot(name, false);
         ws.send(JSON.stringify({ action: 'stop_bot', username: name }));
         appendLog(name, `Dừng bot [${name}]...`, '#f59e0b');
       } else {
+        setActiveRunningBot(name, true);
         const s = bot.settings || {};
         const pwdInput = document.getElementById(`pwd_${name}`);
         const pwd = pwdInput ? pwdInput.value.trim() : (bot.password || '');
@@ -1632,6 +1718,11 @@
     }
 
     // ── INITIALIZATION & PREFERENCES RESTORATION ──
+    // Load local chat history immediately so chat NEVER flashes empty
+    allChatHistory = getLocalChat();
+    if (allChatHistory.length > 0) {
+      renderChatHistory(allChatHistory);
+    }
     const initAccs = getLocalAccounts();
     const initDelSet = getDeletedAccounts();
     for (const [name, acc] of Object.entries(initAccs)) {
@@ -1672,7 +1763,7 @@
       }
       const chatInp = document.getElementById('chatInput');
       if (chatInp) {
-        chatInp.placeholder = `[${selectedBot}] CHAT (gửi tin nhắn / lệnh trong game: /login, /home, /vs...)`;
+        chatInp.placeholder = "Nhập tin nhắn hoặc lệnh...";
       }
       updateDropdown();
     } else {
