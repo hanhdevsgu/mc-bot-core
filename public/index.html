@@ -787,9 +787,9 @@
     // ── CHAT FILTERING: ONLY SHOW SELECTED BOT LOGS ──
     function isMsgHidden(msg) {
       if (!msg) return false;
-      const isDebugPrefix = msg.includes('📂') || msg.includes('🐞') || msg.includes('🧪') || msg.includes('📕') || msg.includes('🔄') || msg.includes('🖱️') || msg.includes('📦') || msg.includes('📏') || msg.includes('📐') || msg.includes('ℹ️');
-      const isDebug = isDebugPrefix || msg.toLowerCase().includes('debug');
-      const isPlayerChat = msg.includes('§') || (msg.includes('<') && msg.includes('>'));
+      const isDebugPrefix = msg.includes('📂') || msg.includes('🐞') || msg.includes('🧪') || msg.includes('📕') || msg.includes('🔄') || msg.includes('🖱️') || msg.includes('📦') || msg.includes('📏') || msg.includes('📐') || msg.includes('ℹ️') || msg.includes('🔍') || msg.includes('⏱️') || msg.includes('⚔️') || msg.includes('🛡️') || msg.includes('✅') || msg.includes('❌') || msg.includes('🔁') || msg.includes('⏳');
+      const isDebug = isDebugPrefix || msg.toLowerCase().includes('debug') || msg.includes('[Farm]') || msg.includes('Chém:') || msg.includes('delay:') || msg.includes('margin=') || msg.includes('ping=');
+      const isPlayerChat = msg.includes('§') || (msg.includes('<') && msg.includes('>')) || msg.includes('⋕') || (msg.includes(': ') && !isDebug);
 
       if (document.getElementById('chkHideDebug')?.checked && isDebug) return true;
       if (document.getElementById('chkHideChat')?.checked && isPlayerChat) return true;
