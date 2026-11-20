@@ -1,4 +1,4 @@
-﻿const mineflayer = require('mineflayer');
+const mineflayer = require('mineflayer');
 const Vec3 = require('vec3').Vec3;
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 
@@ -427,6 +427,11 @@ class BotInstance {
         const myEpoch = this._conn_epoch;
         try {
             this._compass_opened = true;
+            const curSlot = (this.bot && typeof this.bot.quickBarSlot === 'number') ? this.bot.quickBarSlot : 0;
+            if (this._origQuickBarSlot === undefined || this._origQuickBarSlot === null) {
+                // Nếu slot hiện tại chính là slot compass thì trả về slot 0 (vũ khí)
+                this._origQuickBarSlot = (curSlot === (slot - 36)) ? 0 : curSlot;
+            }
             this.bot.setQuickBarSlot(slot - 36);
             setTimeout(() => {
                 try {
@@ -901,22 +906,20 @@ class BotInstance {
             const lockedAlive = locked && !(locked.health !== undefined && locked.health <= 0);
 
             if (lockedAlive) {
-                const dist = eyePos.distanceTo(locked.position.offset(0, 0.15, 0));
-                // ⭐ Dùng farm_range (tầm đánh thật), KHÔNG dùng farm_radius (tầm quét)
+                const dist = this._getDistanceToEntity(eyePos, locked);
+                // ⭐ Dùng farm_range (tầm đánh thật)
                 if (dist <= this.farm_range) {
                     this._lockedTargetExpiresAt = now + this._lockDurationMs;
                     this._lastHadTargetAt = now;
                     return { id: this._lockedTargetId, entity: locked, dist };
                 }
             } else if (this._lockedTargetId !== null && this.farm_debug) {
-                // Mục tiêu biến mất khỏi bot.entities (chết / despawn / bị xoá / unload chunk)
                 this.log(`🔍 [debug] Mục tiêu khoá (id=${this._lockedTargetId}) đã biến mất hoặc chết - huỷ khoá, quét lại.`, '#8b949e');
             }
-            // Mục tiêu khoá không còn hợp lệ (ngoài tầm đánh / chết / biến mất) -> bỏ khoá
             this._lockedTargetId = null;
         }
 
-        const nearest = this.scanNearestMob();
+        const nearest = this.scanNearestMob(this.farm_range);
         if (nearest) {
             this._lockedTargetId = nearest.id;
             this._lockedTargetExpiresAt = now + this._lockDurationMs;
@@ -924,25 +927,14 @@ class BotInstance {
         } else {
             this._lockedTargetId = null;
 
-            // ⭐ WATCHDOG: nếu farm đang bật mà quá lâu (mặc định 2000ms) không hề có
-            // 1 mục tiêu hợp lệ nào trong tầm đánh (kể cả sau khi quét lại), rất có thể
-            // do dữ liệu entity bị "kẹt"/không đồng bộ (mob vừa despawn nhưng client
-            // chưa xử lý event kịp, hoặc bug lạ khác). Log cảnh báo để bạn biết bot đang
-            // chờ mob xuất hiện lại chứ không phải bị treo, farm_radius/backoff mob mới
-            // sẽ tự chạy lại ngay khi có mob vào tầm - không cần tắt/bật farm thủ công.
             if (this.farm_debug && now - this._lastHadTargetAt > this._stuckTimeoutMs) {
-                this.log(`⏳ [debug] Không có mục tiêu nào trong tầm đánh (${this.farm_range} ô) suốt ${Math.round((now - this._lastHadTargetAt) / 1000)}s - đang chờ mob...`, '#f5c842');
-                this._lastHadTargetAt = now; // tránh spam log liên tục
+                this.log(`⏳ [debug] Đang chờ quái vào tầm đánh (${this.farm_range} ô)...`, '#f5c842');
+                this._lastHadTargetAt = now;
             }
         }
         return nearest;
     }
 
-    // ⭐ FIX PROXY-MISS / RAYCAST: thực hiện 1 lần chém hoàn chỉnh cho 1 mục tiêu,
-    // bao gồm: kiểm tra tầm, quay mặt (lookAt), CHỜ cho gói tin xoay góc nhìn kịp
-    // tới server, rồi mới raycast lại để xác định entity THỰC SỰ nằm trên tia ngắm
-    // (đây chính là entity mà server sẽ dùng để xác thực đòn đánh) và tấn công đúng
-    // entity đó. Chạy async & có cờ _attack_in_progress để không chồng lệnh.
     async _attemptAttack(candidateId) {
         if (this._attack_in_progress) return;
         if (!this.bot || !this.running) return;
@@ -959,11 +951,12 @@ class BotInstance {
             const margin = Math.min(latency * 4, 1.5) + this._adaptiveReachMargin;
 
             const eyePos = this.bot.entity.position.offset(0, 1.62, 0);
-            const dist = eyePos.distanceTo(predictedPos.offset(0, 0.15, 0));
+            const dist = this._getDistanceToEntity(eyePos, target);
+            const maxReach = Math.max(this.farm_range, this.ATTACK_REACH) + margin;
 
-            if (dist > this.ATTACK_REACH + margin) {
+            if (dist > maxReach) {
                 if (this.farm_debug) {
-                    this.log(`🔍 [debug] Bỏ qua (ngoài tầm): ${target.name || '?'} dist=${dist.toFixed(2)} > reach=${(this.ATTACK_REACH + margin).toFixed(2)}`, '#8b949e');
+                    this.log(`🔍 [debug] Bỏ qua (ngoài tầm): ${target.name || '?'} dist=${dist.toFixed(2)} > reach=${maxReach.toFixed(2)}`, '#8b949e');
                 }
                 return;
             }
@@ -974,11 +967,6 @@ class BotInstance {
                     this.bot.lookAt(predictedPos.offset(0, lookHeight, 0), true);
                 } catch (e) {}
 
-                // ⭐ SETTLE THEO NGỮ CẢNH: nếu đây là lần đầu chém 1 mục tiêu MỚI (khác con
-                // vừa chém trước đó), góc quay thường lớn hơn nhiều so với việc giữ nguyên
-                // hướng đánh tiếp con cũ -> cần chờ lâu hơn để gói xoay góc nhìn kịp "chốt"
-                // ở server trước khi gửi attack. Đánh lại đúng con cũ thì giữ settle ngắn để
-                // không làm chậm tốc độ farm không cần thiết.
                 const isNewTarget = candidateId !== this._lastAttackTargetId;
                 const settleMs = isNewTarget
                     ? Math.max(this._lookSettleMs, this._lookSettleSwitchMs)
@@ -989,34 +977,19 @@ class BotInstance {
             }
 
             if (!this.bot || !this.running) return;
-            // Re-check còn sống + còn trong tầm sau khi chờ (thế giới có thể đã đổi)
             const stillTarget = this.bot.entities[candidateId];
             if (!stillTarget || (stillTarget.health !== undefined && stillTarget.health <= 0)) return;
 
-            const finalLatency = this._getLatencySec();
-            const finalPredictedPos = stillTarget.velocity
-                ? stillTarget.position.plus(stillTarget.velocity.scaled(finalLatency))
-                : stillTarget.position;
-            const finalMargin = Math.min(finalLatency * 4, 1.5) + this._adaptiveReachMargin;
-            const finalDist = this.bot.entity.position
-                .offset(0, 1.62, 0)
-                .distanceTo(finalPredictedPos.offset(0, 0.15, 0));
+            const finalDist = this._getDistanceToEntity(this.bot.entity.position.offset(0, 1.62, 0), stillTarget);
+            const finalMaxReach = Math.max(this.farm_range, this.ATTACK_REACH) + margin;
 
-            if (finalDist > this.ATTACK_REACH + finalMargin) {
+            if (finalDist > finalMaxReach) {
                 if (this.farm_debug) {
-                    this.log(`🔍 [debug] Bỏ qua lúc chém (ngoài tầm sau settle): ${stillTarget.name || '?'} dist=${finalDist.toFixed(2)} > reach=${(this.ATTACK_REACH + finalMargin).toFixed(2)}`, '#8b949e');
+                    this.log(`🔍 [debug] Bỏ qua lúc chém (ngoài tầm sau settle): ${stillTarget.name || '?'} dist=${finalDist.toFixed(2)} > reach=${finalMaxReach.toFixed(2)}`, '#8b949e');
                 }
                 return;
             }
 
-            // ⭐ FIX RAYCAST-OFF-BY-DEFAULT: dữ liệu log thực tế cho thấy server KHÔNG tự
-            // raytrace lại để xác thực entity - client chọn entityId (qua crosshair) và
-            // gửi thẳng lên, server chỉ kiểm tra khoảng cách/tầm (đúng cơ chế vanilla).
-            // Khi nhiều mob đứng chồng hitbox (chuồng farm), hàm raycast tự chế của bot lại
-            // bị nhiễu và "đổi" sang con mob SÁT BÊN mục tiêu đã khoá -> gửi attack sai con,
-            // server không nhận ra entity đó nằm trong tầm nhìn hợp lệ như con đã khoá -> miss.
-            // Vì vậy MẶC ĐỊNH tắt raycast retargeting, đánh thẳng vào mục tiêu đã khoá/chọn.
-            // Bật lại bằng settings.farm_use_raycast (true) nếu gặp server có raytrace thật.
             let attackTarget = stillTarget;
             let retargeted = false;
             if (this.farm_use_raycast) {
@@ -1033,7 +1006,6 @@ class BotInstance {
             const expectConfirm = (sentNow - prevSentAt) >= this._invulnWindowMs;
             this._lastAttackSentAt.set(attackTargetId, sentNow);
 
-            this.equipBestWeapon();
             this.bot.attack(attackTarget);
             this._lastAttackTargetId = attackTargetId;
             this._pendingAttacks.set(attackTargetId, { sentAt: sentNow, expectConfirm });
@@ -1185,7 +1157,7 @@ class BotInstance {
         }
     }
 
-    scanNearestMob() {
+    scanNearestMob(maxRange = this.farm_range) {
         if (!this.bot || !this.bot.entity) return null;
 
         const entities = this.bot.entities;
@@ -1200,14 +1172,10 @@ class BotInstance {
                     (entity.name && entity.type !== 'player' && entity.type !== 'object' && entity.type !== 'global');
                 if (!isCreature) continue;
                 if (entity.health !== undefined && entity.health <= 0) continue;
+                if (!entity.position) continue;
 
-                const pos = entity.position;
-                if (!pos) continue;
-
-                const targetPos = pos.offset(0, 0.15, 0);
-                const dist = eyePos.distanceTo(targetPos);
-
-                if (dist < nearestDist && dist <= this.farm_radius) {
+                const dist = this._getDistanceToEntity(eyePos, entity);
+                if (dist < nearestDist && dist <= maxRange) {
                     nearestDist = dist;
                     nearest = { id, entity, dist };
                 }
@@ -1221,7 +1189,7 @@ class BotInstance {
 
     _getEntityHitbox(entity) {
         const width = (entity.width !== undefined && entity.width > 0) ? entity.width : 0.9;
-        const height = (entity.height !== undefined && entity.height > 0) ? entity.height : 1.4;
+        const height = (entity.height !== undefined && entity.height > 0) ? entity.height : 1.8;
         const halfW = width / 2;
         const pos = entity.position;
         return {
@@ -1229,6 +1197,18 @@ class BotInstance {
             minY: pos.y, maxY: pos.y + height,
             minZ: pos.z - halfW, maxZ: pos.z + halfW,
         };
+    }
+
+    _getDistanceToEntity(eyePos, entity) {
+        if (!entity || !entity.position) return 999;
+        const box = this._getEntityHitbox(entity);
+        const clampedX = Math.max(box.minX, Math.min(eyePos.x, box.maxX));
+        const clampedY = Math.max(box.minY, Math.min(eyePos.y, box.maxY));
+        const clampedZ = Math.max(box.minZ, Math.min(eyePos.z, box.maxZ));
+        const dx = eyePos.x - clampedX;
+        const dy = eyePos.y - clampedY;
+        const dz = eyePos.z - clampedZ;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     _rayIntersectsAABB(origin, dir, box) {
@@ -2341,10 +2321,7 @@ class BotInstance {
                 return;
             }
 
-            // ⭐ Chỉ gửi /dn nếu chưa đăng nhập và chưa gửi /dn trước đó
-            if (!this.is_authenticated && !this._dn_sent) {
-                this.sendDn(attempt === 1 ? 'chuẩn bị mở GUI compass' : `retry lần ${attempt}`);
-            }
+            // (Không gửi /dn ở đây vì đã gửi tự động lúc login event hoặc khi server nhắc)
 
             const clickStep = () => {
                 if (isStale() || !this.bot || !this.running) return;
@@ -2476,14 +2453,26 @@ class BotInstance {
                 this.log(`✅ Đã click`, '#2ecc71');
                 this.debugDumpHotbar('Ngay sau khi click');
 
-                setTimeout(() => {
-                    this.debugDumpHotbar('500ms sau khi click');
-                    if (this.isJoinedServer()) {
-                        this.log("🎉 THÀNH CÔNG! Đã vào server!", '#2ecc71');
+                // Load lại hotbar check kĩ liên tục rồi mới xác nhận vào server
+                let checkCount = 0;
+                const maxChecks = 15;
+                const pollHotbarAfterClick = () => {
+                    if (!this.running || !this.bot || this.joined_server) return;
+                    checkCount++;
+                    const compassSlot = this.findCompassSlot();
+                    if (compassSlot === -1 && this.hasLoadedHotbarItems()) {
+                        this.log(`🎉 THÀNH CÔNG! Đã vào server! (hotbar đã load xong, không còn compass sau ${checkCount * 400}ms)`, '#2ecc71');
                         this.sendJoined();
                         this.markJoinedServer();
+                        return;
                     }
-                }, 500);
+                    if (checkCount < maxChecks) {
+                        setTimeout(pollHotbarAfterClick, 400);
+                    } else {
+                        this.log(`⚠️ Sau ${(maxChecks * 400) / 1000}s click axe hotbar vẫn chưa chuyển sang server mới, sẽ retry...`, '#f5c842');
+                    }
+                };
+                setTimeout(pollHotbarAfterClick, 400);
 
                 return true;
             } else {
@@ -2496,16 +2485,23 @@ class BotInstance {
         }
     }
 
-    isJoinedServer() {
-        if (!this.bot) return false;
+    hasLoadedHotbarItems() {
+        if (!this.bot || !this.bot.inventory) return false;
         try {
-            // Hotbar còn compass => vẫn ở lobby
+            for (let i = 0; i < 9; i++) {
+                const s = this.bot.inventory.slots[36 + i];
+                if (s && s.name && s.name !== 'compass') return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    isJoinedServer() {
+        if (!this.bot || !this.bot.inventory) return false;
+        try {
+            // Hotbar còn compass => chắc chắn vẫn ở lobby
             if (this.findCompassSlot() !== -1) return false;
-
-            const slot5 = this.bot.inventory.slots[36 + 4];
-            if (slot5) return true;
-
-            return this.clicked_axe === true;
+            return this.hasLoadedHotbarItems();
         } catch (e) {
             return false;
         }
@@ -2537,15 +2533,17 @@ class BotInstance {
         this.stopKillWatchdog();
         this.log("✅ Đã vào server!", '#2ecc71');
 
-        // Tự động cầm vũ khí và đồng bộ trạng thái item lên giao diện web
-        setTimeout(() => {
-            this.equipBestWeapon();
-            this.sendHeldItem();
-        }, 300);
-        setTimeout(() => {
-            this.equipBestWeapon();
-            this.sendHeldItem();
-        }, 1200);
+        // Trả lại slot người dùng (mặc định slot 0 là vũ khí)
+        try {
+            const targetSlot = (this._origQuickBarSlot !== undefined && this._origQuickBarSlot !== null && this._origQuickBarSlot !== 4)
+                ? this._origQuickBarSlot
+                : 0;
+            this.bot.setQuickBarSlot(targetSlot);
+        } catch (e) {}
+        this.sendHeldItem();
+        setTimeout(() => this.sendHeldItem(), 300);
+        setTimeout(() => this.sendHeldItem(), 800);
+        setTimeout(() => this.sendHeldItem(), 1800);
 
         if (this.afk_persist && !this.anti_afk_running) {
             setTimeout(() => this.startAntiAfk(), 1000);
@@ -2763,7 +2761,20 @@ class BotInstance {
             });
 
             this.bot.on('respawn', () => {
-                setTimeout(() => this.hotbarTick('respawn'), 1500);
+                setTimeout(() => {
+                    this.hotbarTick('respawn');
+                    if (this.bot && this.bot.inventory) {
+                        try {
+                            this.bot.inventory.on('updateSlot', (slot) => {
+                                if (this.joined_server) {
+                                    if (slot >= 36 && slot <= 44) this.sendHeldItem();
+                                    this.onInventorySlotChanged(slot);
+                                }
+                            });
+                        } catch (e) {}
+                    }
+                    this.sendHeldItem();
+                }, 1000);
             });
 
             this.bot.on('kicked', (reason) => {
@@ -2895,46 +2906,6 @@ class BotInstance {
                 this.reconnect();
             }
         }
-    }
-
-    findBestWeaponSlot() {
-        if (!this.bot || !this.bot.inventory) return -1;
-        const WEAPON_PRIORITY = [
-            'netherite_sword', 'diamond_sword', 'iron_sword', 'golden_sword', 'stone_sword', 'wooden_sword',
-            'netherite_axe', 'diamond_axe', 'iron_axe', 'golden_axe', 'stone_axe', 'wooden_axe'
-        ];
-        // 1. Quét 9 ô hotbar (slot 36 -> 44) theo thứ tự ưu tiên
-        for (const weaponName of WEAPON_PRIORITY) {
-            for (let hotbarIdx = 0; hotbarIdx < 9; hotbarIdx++) {
-                const item = this.bot.inventory.slots[36 + hotbarIdx];
-                if (item && item.name && (item.name === weaponName || item.name.includes(weaponName))) {
-                    return hotbarIdx;
-                }
-            }
-        }
-        // 2. Nếu không khớp tên chuẩn, tìm bất kỳ kiếm hoặc rìu nào trong hotbar
-        for (let hotbarIdx = 0; hotbarIdx < 9; hotbarIdx++) {
-            const item = this.bot.inventory.slots[36 + hotbarIdx];
-            if (item && item.name && (item.name.includes('sword') || item.name.includes('axe'))) {
-                return hotbarIdx;
-            }
-        }
-        return -1;
-    }
-
-    equipBestWeapon() {
-        if (!this.bot || !this.bot.inventory) return false;
-        try {
-            const weaponHotbarIdx = this.findBestWeaponSlot();
-            if (weaponHotbarIdx !== -1) {
-                if (this.bot.quickBarSlot !== weaponHotbarIdx) {
-                    this.bot.setQuickBarSlot(weaponHotbarIdx);
-                    this.sendHeldItem();
-                }
-                return true;
-            }
-        } catch (e) {}
-        return false;
     }
 
     sendHeldItem() {

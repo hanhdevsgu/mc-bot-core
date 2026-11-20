@@ -4,6 +4,62 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'mc_core_secure_jwt_token_key_2026_render';
+const ADMIN_CONFIG_FILE = path.join(__dirname, '_admin_config.json');
+
+function getAdminConfig() {
+    try {
+        if (fs.existsSync(ADMIN_CONFIG_FILE)) {
+            return JSON.parse(fs.readFileSync(ADMIN_CONFIG_FILE, 'utf-8'));
+        }
+    } catch (e) {}
+    if (process.env.ADMIN_PASSWORD) {
+        const hash = bcrypt.hashSync(String(process.env.ADMIN_PASSWORD).trim(), 10);
+        const cfg = { username: 'admin', password_hash: hash, created_at: new Date().toISOString() };
+        try { fs.writeFileSync(ADMIN_CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8'); } catch(e) {}
+        return cfg;
+    }
+    return null;
+}
+
+function saveAdminConfig(cfg) {
+    try {
+        fs.writeFileSync(ADMIN_CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
+    } catch (e) {
+        console.error('Lỗi lưu admin config:', e);
+    }
+}
+
+function verifyAdminToken(token) {
+    if (!token) return null;
+    try {
+        return jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+        return null;
+    }
+}
+
+function parseJsonBody(req, callback) {
+    let body = '';
+    req.on('data', chunk => {
+        body += chunk;
+        if (body.length > 1e6) {
+            req.destroy();
+            callback(new Error('Payload too large'));
+        }
+    });
+    req.on('end', () => {
+        try {
+            const parsed = JSON.parse(body || '{}');
+            callback(null, parsed);
+        } catch (e) {
+            callback(e);
+        }
+    });
+}
 
 const WS_PORT = process.env.PORT || 54322;
 const MC_SERVER_HOST = '171.244.52.181';
@@ -596,6 +652,14 @@ function stopBot(username) {
     }
 
     bots[username].wasStopped = true;
+    try {
+        let s = loadSession(username);
+        if (s) {
+            if (!s.settings) s.settings = {};
+            s.settings.user_manually_stopped = true;
+            saveSession(username, s);
+        }
+    } catch (e) {}
 
     if (crashRetryTimers[username]) {
         clearTimeout(crashRetryTimers[username]);
@@ -694,14 +758,14 @@ function flushLogBatch() {
     if (batch.length === 1) {
         const payload = JSON.stringify({ type: 'log', args: [batch[0].msg, batch[0].color, batch[0].timeStr] });
         for (const ws of wsClients) {
-            if (ws.readyState === WebSocket.OPEN) {
+            if (ws.readyState === WebSocket.OPEN && ws.isAuthenticated) {
                 try { ws.send(payload); } catch (e) {}
             }
         }
     } else {
         const payload = JSON.stringify({ type: 'logs_batch', args: [batch] });
         for (const ws of wsClients) {
-            if (ws.readyState === WebSocket.OPEN) {
+            if (ws.readyState === WebSocket.OPEN && ws.isAuthenticated) {
                 try { ws.send(payload); } catch (e) {}
             }
         }
@@ -725,7 +789,7 @@ function sendToPython(type, ...args) {
 
     const payload = JSON.stringify({ type, args });
     for (const ws of wsClients) {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === WebSocket.OPEN && ws.isAuthenticated) {
             try { ws.send(payload); } catch (e) {}
         }
     }
@@ -744,11 +808,11 @@ function listSavedSessions() {
                     if (Array.isArray(accList)) {
                         for (const a of accList) {
                             if (a && a.username) {
-                                if (!accountsMap.has(a.username) || (a.password && !accountsMap.get(a.username).savedPassword)) {
+                                if (!accountsMap.has(a.username)) {
                                     accountsMap.set(a.username, {
                                         username: a.username,
                                         settings: a,
-                                        savedPassword: a.password || ''
+                                        hasPassword: !!a.password
                                     });
                                 }
                             }
@@ -765,12 +829,12 @@ function listSavedSessions() {
                         try {
                             const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
                             const existing = accountsMap.get(username);
-                            const pwd = data.password || (existing ? existing.savedPassword : '') || '';
                             const st = data.settings || (existing ? existing.settings : {}) || {};
+                            const hasPwd = !!(data.password || (existing && existing.hasPassword));
                             accountsMap.set(username, {
                                 username,
                                 settings: st,
-                                savedPassword: pwd
+                                hasPassword: hasPwd
                             });
                         } catch (e) {}
                     }
@@ -799,7 +863,7 @@ function getAllStatuses() {
             ip: displayIp,
             proxy: botProxy,
             item: bot.item || 'Tay không (Trống)',
-            password: bot.password || ''
+            hasPassword: !!bot.password
         };
     }
     return statuses;
@@ -818,9 +882,81 @@ const WS_RETRY_DELAY_MS = 2000;
 
 function startWsServer() {
     const httpServer = http.createServer((req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        if (req.method === 'OPTIONS') {
+            res.writeHead(204);
+            return res.end();
+        }
+
         if (req.url === '/health' || req.url === '/ping') {
             res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
             return res.end('OK');
+        }
+
+        if (req.url === '/api/auth/status' && req.method === 'GET') {
+            const cfg = getAdminConfig();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ isSetup: !!cfg }));
+        }
+
+        if (req.url === '/api/auth/setup' && req.method === 'POST') {
+            parseJsonBody(req, (err, body) => {
+                const cfg = getAdminConfig();
+                if (cfg) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: false, error: 'Mật khẩu admin đã được thiết lập từ trước' }));
+                }
+                const password = String(body && body.password || '').trim();
+                if (!password || password.length < 4) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: false, error: 'Mật khẩu phải từ 4 ký tự trở lên' }));
+                }
+                const hash = bcrypt.hashSync(password, 10);
+                saveAdminConfig({ username: 'admin', password_hash: hash, created_at: new Date().toISOString() });
+                const token = jwt.sign({ role: 'admin', username: 'admin' }, JWT_SECRET, { expiresIn: '14d' });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ ok: true, token }));
+            });
+            return;
+        }
+
+        if (req.url === '/api/auth/login' && req.method === 'POST') {
+            parseJsonBody(req, (err, body) => {
+                if (err || !body || !body.password) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: false, error: 'Vui lòng nhập mật khẩu admin' }));
+                }
+                const cfg = getAdminConfig();
+                if (!cfg) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: false, error: 'Chưa khởi tạo mật khẩu admin, vui lòng thiết lập trước' }));
+                }
+                const isValid = bcrypt.compareSync(String(body.password), cfg.password_hash);
+                if (isValid) {
+                    const token = jwt.sign({ role: 'admin', username: 'admin' }, JWT_SECRET, { expiresIn: '14d' });
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: true, token }));
+                } else {
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: false, error: 'Sai mật khẩu quản trị!' }));
+                }
+            });
+            return;
+        }
+
+        if (req.url === '/api/auth/verify' && req.method === 'GET') {
+            const authHeader = req.headers['authorization'] || '';
+            const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+            const decoded = verifyAdminToken(token);
+            if (decoded) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ ok: true, authenticated: true }));
+            } else {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ ok: false, error: 'Token không hợp lệ hoặc đã hết hạn' }));
+            }
         }
 
         const indexPath = path.join(__dirname, 'public', 'index.html');
@@ -862,18 +998,34 @@ function startWsServer() {
 
     server.on('connection', (ws) => {
         wsClients.add(ws);
-        currentWs = ws;
+        ws.isAuthenticated = false;
         console.log(`🔌 Client connected (total: ${wsClients.size})`);
 
-        try {
-            ws.send(JSON.stringify({ type: 'all_status', args: [getAllStatuses()] }));
-            ws.send(JSON.stringify({ type: 'saved_accounts', args: [listSavedSessions()] }));
-            ws.send(JSON.stringify({ type: 'chat_history', args: [logHistory] }));
-        } catch (e) {}
+        ws.send(JSON.stringify({ type: 'auth_required' }));
 
         ws.on('message', (message) => {
             try {
                 const data = JSON.parse(message);
+                if (data.action === 'auth') {
+                    const decoded = verifyAdminToken(data.token);
+                    if (decoded) {
+                        ws.isAuthenticated = true;
+                        currentWs = ws;
+                        ws.send(JSON.stringify({ type: 'auth_ok' }));
+                        ws.send(JSON.stringify({ type: 'all_status', args: [getAllStatuses()] }));
+                        ws.send(JSON.stringify({ type: 'saved_accounts', args: [listSavedSessions()] }));
+                        ws.send(JSON.stringify({ type: 'chat_history', args: [logHistory] }));
+                        return;
+                    } else {
+                        ws.send(JSON.stringify({ type: 'auth_failed', error: 'Token không hợp lệ hoặc đã hết hạn' }));
+                        return;
+                    }
+                }
+
+                if (!ws.isAuthenticated) {
+                    ws.send(JSON.stringify({ type: 'auth_required', error: 'Vui lòng xác thực quyền quản trị' }));
+                    return;
+                }
                 const {
                     action, username, password, msg, enabled, farm_range, farm_radius, farm_min_delay, farm_max_delay,
                     afk_persist, farm_persist, storage_persist, proxy,
@@ -904,26 +1056,14 @@ function startWsServer() {
                                 saveSession(username, s);
                             }
                             const botPassword = password || s.password || '';
+                            const incomingSettings = Object.assign({}, (s && s.settings) || {}, data.settings || {}, data);
+                            delete incomingSettings.action;
+                            delete incomingSettings.username;
+                            delete incomingSettings.password;
+                            delete incomingSettings.token;
+                            incomingSettings.user_manually_stopped = false;
                             startBot(username, botPassword, {
-                                settings: {
-                                    farm_range, farm_radius, farm_min_delay,
-                                    farm_max_delay, afk_persist, farm_persist, storage_persist, proxy,
-                                    only_pickup_target, target_item_id, target_amount,
-                                    storage_commands, storage_loop_delay,
-                                    storage_restart_hours, storage_restart_minutes, storage_restart_seconds, storage_autostart_on_join,
-                    storage_expect_guard, storage_expect_reconnect_min,
-                                    storage_clear_command, storage_deposit_command, storage_reconnect_home_command,
-                                    storage_clear_delta_x, storage_clear_delta_y, storage_clear_delta_z,
-                                    storage_clear_pitch, storage_clear_yaw, storage_clear_lock_y,
-                                    storage_clear2_enabled, storage_clear2_delta_x, storage_clear2_delta_y, storage_clear2_delta_z, storage_clear2_pitch, storage_clear2_yaw, storage_clear2_lock_y,
-                                    storage_deposit_delta_x, storage_deposit_delta_y, storage_deposit_delta_z,
-                                    storage_deposit_pitch, storage_deposit_yaw, storage_deposit_lock_y,
-                                    storage_after_goto_x, storage_after_goto_y, storage_after_goto_z, storage_after_goto_chain, storage_gui_chain,
-                                    storage_deposit2_enabled, storage_deposit2_delta_x, storage_deposit2_delta_y, storage_deposit2_delta_z, storage_deposit2_pitch, storage_deposit2_yaw, storage_deposit2_lock_y,
-                                    lock_pitch_yaw, lock_pitch, lock_yaw,
-                                    move_delta_x, move_delta_y, move_delta_z,
-                                    farm_smart_aim, farm_lookat
-                                }
+                                settings: incomingSettings
                             });
                             sendToPython('saved_accounts', listSavedSessions());
                         }
@@ -1267,6 +1407,10 @@ startWsServer();
     console.log(`♻️  Phát hiện ${usernames.length} bot đang chạy từ phiên trước, tự khởi động lại...`);
     for (const username of usernames) {
         const { password, settings } = previous[username];
+        if (settings && settings.user_manually_stopped) {
+            console.log(`🛑 [24/7] Bỏ qua [${username}] vì người dùng đã chủ động bấm DỪNG.`);
+            continue;
+        }
         if (password) {
             startBot(username, password, { isAutoRestart: true, settings });
         }

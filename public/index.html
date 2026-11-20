@@ -93,7 +93,7 @@
       </div>
     </div>
 
-    <!-- SERVER NETWORK PILL -->
+    <!-- SERVER NETWORK PILL & AUTH -->
     <div class="flex items-center gap-3">
       <div class="flex items-center gap-1.5 bg-[#0c0d12] border border-[#202436] rounded-full px-3 py-1 text-xs font-mono font-medium text-emerald-400">
         <svg class="w-3 h-3 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -103,6 +103,14 @@
         <span id="topIp">Chưa kết nối</span>
       </div>
       <div id="connDot" class="w-2.5 h-2.5 rounded-full bg-rose-500 transition-all duration-300" title="Trạng thái WebSocket Server"></div>
+      <button onclick="logoutAdmin()" title="Đăng xuất khỏi phiên quản trị" class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-400 bg-[#0c0d12] hover:bg-rose-950/30 border border-[#202436] hover:border-rose-800/50 px-2.5 py-1 rounded transition">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <polyline points="16 17 21 12 16 7"></polyline>
+          <line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg>
+        <span class="text-[11px] font-semibold">Đăng xuất</span>
+      </button>
     </div>
   </header>
 
@@ -272,6 +280,54 @@
 
     </aside>
   </main>
+
+  <!-- ── ADMIN AUTH GATEWAY MODAL (BCRYPT + JWT BEARER) ── -->
+  <div id="authModal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center p-4 z-[999]">
+    <div class="bg-[#10121b] border border-[#262b3d] rounded-xl max-w-sm w-full p-5 shadow-2xl flex flex-col gap-4 text-xs select-text">
+      
+      <div class="flex items-center gap-3 border-b border-[#202436] pb-3">
+        <div class="w-9 h-9 rounded-lg bg-indigo-500/15 border border-indigo-500/35 flex items-center justify-center text-indigo-400 shrink-0">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <div>
+          <h2 id="authModalTitle" class="font-extrabold text-sm text-slate-100">Bảo Mật Quản Trị</h2>
+          <p id="authModalSubtitle" class="text-[11px] text-slate-400">Xác thực quyền quản trị hệ thống MC Bot</p>
+        </div>
+      </div>
+
+      <div id="authErrorMsg" class="hidden bg-rose-950/40 border border-rose-800/60 rounded px-2.5 py-1.5 text-[11.5px] text-rose-300 font-medium"></div>
+
+      <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-3">
+        <div id="authSetupFields" class="space-y-2 hidden">
+          <label class="block text-slate-300 font-medium text-[11px]">Thiết lập mật khẩu quản trị mới:</label>
+          <input type="password" id="authSetupPassword" placeholder="Nhập mật khẩu admin..." 
+                 class="w-full bg-[#141622] border border-[#202436] rounded px-3 py-2 text-slate-100 placeholder-slate-500 outline-none focus:border-indigo-500 font-mono text-xs">
+          <label class="block text-slate-300 font-medium text-[11px]">Xác nhận lại mật khẩu:</label>
+          <input type="password" id="authSetupConfirm" placeholder="Nhập lại mật khẩu admin..." 
+                 class="w-full bg-[#141622] border border-[#202436] rounded px-3 py-2 text-slate-100 placeholder-slate-500 outline-none focus:border-indigo-500 font-mono text-xs">
+          <p class="text-[10.5px] text-amber-400/90 leading-tight">⚠️ Mật khẩu sẽ được băm bằng Bcrypt và bảo mật tuyệt đối trên server.</p>
+        </div>
+
+        <div id="authLoginFields" class="space-y-2">
+          <label class="block text-slate-300 font-medium text-[11px]">Mật khẩu quản trị (Admin):</label>
+          <input type="password" id="authLoginPassword" placeholder="Nhập mật khẩu admin..." 
+                 class="w-full bg-[#141622] border border-[#202436] rounded px-3 py-2 text-slate-100 placeholder-slate-500 outline-none focus:border-indigo-500 font-mono text-xs" autofocus>
+          <p class="text-[10.5px] text-slate-500 leading-tight">Mọi thông tin bot & mật khẩu server được mã hoá và lưu trữ độc quyền trên database server.</p>
+        </div>
+
+        <button type="submit" id="authSubmitBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition shadow">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span id="authSubmitBtnText">Đăng nhập Quản Trị</span>
+        </button>
+      </form>
+
+    </div>
+  </div>
 
   <!-- ── SETTINGS MODAL (CẤU HÌNH BOT - 7 MỤC CHUẨN 100% DESKTOP APP) ── -->
   <div id="settingsModal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center p-4 z-50">
@@ -566,26 +622,210 @@
     let renderBotsScheduled = false;
     let pwdDebounceTimers = {};
 
-    // ── LOCAL STORAGE ACCOUNT PERSISTENCE & ANTI-ROLLBACK AUTHORITY ──
-    
-    // ── 24/7 RUNNING BOT AUTHORITY & CHAT PERSISTENCE ──
-    
+    // ── PURGE ANY SENSITIVE PLAINTEXT PASSWORDS FROM LOCAL STORAGE ──
+    try {
+      localStorage.removeItem('mc_user_saved_accounts');
+      localStorage.removeItem('mc_local_chat_history');
+    } catch (e) {}
+
+    // ── JWT BEARER TOKEN & ADMIN AUTHENTICATION ──
+    function getAdminToken() {
+      try {
+        return localStorage.getItem('mc_admin_token') || '';
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function setAdminToken(t) {
+      try {
+        if (t) localStorage.setItem('mc_admin_token', t);
+        else localStorage.removeItem('mc_admin_token');
+      } catch (e) {}
+    }
+
+    function logoutAdmin() {
+      setAdminToken('');
+      if (ws) {
+        try { ws.close(); } catch (e) {}
+        ws = null;
+      }
+      showAuthModal('login');
+    }
+
+    async function checkAdminAuth() {
+      const token = getAdminToken();
+      if (token) {
+        try {
+          const res = await fetch('/api/auth/verify', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            hideAuthModal();
+            initWs();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Check if setup is needed
+      try {
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        if (data && data.needsSetup) {
+          showAuthModal('setup');
+        } else {
+          showAuthModal('login');
+        }
+      } catch (e) {
+        showAuthModal('login');
+      }
+    }
+
+    let currentAuthMode = 'login';
+    function showAuthModal(mode = 'login') {
+      currentAuthMode = mode;
+      const modal = document.getElementById('authModal');
+      const setupFields = document.getElementById('authSetupFields');
+      const loginFields = document.getElementById('authLoginFields');
+      const title = document.getElementById('authModalTitle');
+      const sub = document.getElementById('authModalSubtitle');
+      const btnTxt = document.getElementById('authSubmitBtnText');
+      const errBox = document.getElementById('authErrorMsg');
+
+      errBox.classList.add('hidden');
+      errBox.innerText = '';
+
+      if (mode === 'setup') {
+        setupFields.classList.remove('hidden');
+        loginFields.classList.add('hidden');
+        title.innerText = 'Thiết Lập Mật Khẩu Admin';
+        sub.innerText = 'Tạo mật khẩu quản trị lần đầu (mã hoá Bcrypt + JWT token)';
+        btnTxt.innerText = 'Khởi tạo & Đăng nhập';
+        setTimeout(() => document.getElementById('authSetupPassword')?.focus(), 100);
+      } else {
+        setupFields.classList.add('hidden');
+        loginFields.classList.remove('hidden');
+        title.innerText = 'Xác Thực Quản Trị';
+        sub.innerText = 'Nhập mật khẩu Admin để truy cập toàn bộ hệ thống';
+        btnTxt.innerText = 'Đăng nhập Quản Trị';
+        setTimeout(() => document.getElementById('authLoginPassword')?.focus(), 100);
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function hideAuthModal() {
+      document.getElementById('authModal').classList.add('hidden');
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const errBox = document.getElementById('authErrorMsg');
+      errBox.classList.add('hidden');
+
+      if (currentAuthMode === 'setup') {
+        const pwd = document.getElementById('authSetupPassword').value;
+        const confirm = document.getElementById('authSetupConfirm').value;
+        if (!pwd || pwd.length < 4) {
+          errBox.innerText = 'Mật khẩu quản trị phải có ít nhất 4 ký tự!';
+          errBox.classList.remove('hidden');
+          return;
+        }
+        if (pwd !== confirm) {
+          errBox.innerText = 'Mật khẩu xác nhận không trùng khớp!';
+          errBox.classList.remove('hidden');
+          return;
+        }
+        try {
+          const res = await fetch('/api/auth/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd })
+          });
+          const data = await res.json();
+          if (data && data.ok && data.token) {
+            setAdminToken(data.token);
+            hideAuthModal();
+            initWs();
+          } else {
+            errBox.innerText = data.error || 'Lỗi thiết lập mật khẩu';
+            errBox.classList.remove('hidden');
+          }
+        } catch (err) {
+          errBox.innerText = 'Lỗi kết nối tới server: ' + err.message;
+          errBox.classList.remove('hidden');
+        }
+      } else {
+        const pwd = document.getElementById('authLoginPassword').value;
+        if (!pwd) {
+          errBox.innerText = 'Vui lòng nhập mật khẩu!';
+          errBox.classList.remove('hidden');
+          return;
+        }
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd })
+          });
+          const data = await res.json();
+          if (data && data.ok && data.token) {
+            setAdminToken(data.token);
+            hideAuthModal();
+            initWs();
+          } else {
+            errBox.innerText = data.error || 'Sai mật khẩu!';
+            errBox.classList.remove('hidden');
+          }
+        } catch (err) {
+          errBox.innerText = 'Lỗi kết nối tới server: ' + err.message;
+          errBox.classList.remove('hidden');
+        }
+      }
+    }
+
+    // ── 24/7 RUNNING BOT AUTHORITY & USER STOPPED BOUNDARY ──
+    function getUserStoppedBots() {
+      try {
+        const raw = localStorage.getItem('mc_user_stopped_bots');
+        return new Set(raw ? JSON.parse(raw) : []);
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function setUserStoppedBot(name, isStopped) {
+      try {
+        const stopped = getUserStoppedBots();
+        const running = getActiveRunningBots();
+        if (isStopped) {
+          stopped.add(name);
+          running.delete(name);
+        } else {
+          stopped.delete(name);
+          running.add(name);
+        }
+        localStorage.setItem('mc_user_stopped_bots', JSON.stringify(Array.from(stopped)));
+        localStorage.setItem('mc_active_running_bots', JSON.stringify(Array.from(running)));
+      } catch (e) {}
+    }
+
     function autoResumeActiveBots() {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       const runningSet = getActiveRunningBots();
+      const stoppedSet = getUserStoppedBots();
       if (runningSet.size === 0) return;
 
-      const localAccs = getLocalAccounts();
       for (const name of runningSet) {
+        if (stoppedSet.has(name)) continue; // TUYỆT ĐỐI KHÔNG CHẠY LẠI BOT ĐÃ BẤM DỪNG
         const bot = bots[name] || {};
         if (!bot.running) {
-          const acc = localAccs[name] || {};
-          const pwd = bot.password || acc.password || '';
-          const s = bot.settings || acc.settings || {};
+          const s = bot.settings || {};
           ws.send(JSON.stringify({
             action: 'start_bot',
             username: name,
-            password: pwd,
+            password: '',
             settings: s
           }));
           appendLog(name, `🔄 [24/7] Tự động kết nối lại cho [${name}] sau khi hệ thống cập nhật...`, '#10b981');
@@ -609,43 +849,6 @@
         else set.delete(name);
         localStorage.setItem('mc_active_running_bots', JSON.stringify(Array.from(set)));
       } catch (e) {}
-    }
-
-    // Remove any legacy local chat to free 100% client storage/RAM
-    try { localStorage.removeItem('mc_local_chat_history'); } catch (e) {}
-
-    function getLocalAccounts() {
-      try {
-        const raw = localStorage.getItem('mc_user_saved_accounts');
-        return raw ? JSON.parse(raw) : {};
-      } catch (e) {
-        return {};
-      }
-    }
-
-    function saveLocalAccounts(accs) {
-      try {
-        localStorage.setItem('mc_user_saved_accounts', JSON.stringify(accs));
-      } catch (e) {}
-    }
-
-    function getDeletedAccounts() {
-      try {
-        const raw = localStorage.getItem('mc_deleted_accounts');
-        return new Set(raw ? JSON.parse(raw) : []);
-      } catch (e) {
-        return new Set();
-      }
-    }
-
-    function markAccountDeleted(name) {
-      const delSet = getDeletedAccounts();
-      delSet.add(name);
-      localStorage.setItem('mc_deleted_accounts', JSON.stringify(Array.from(delSet)));
-
-      const accs = getLocalAccounts();
-      delete accs[name];
-      saveLocalAccounts(accs);
     }
 
 
@@ -740,9 +943,8 @@
 
       ws.onopen = () => {
         dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]';
-        ws.send(JSON.stringify({ action: 'get_saved_accounts' }));
-        ws.send(JSON.stringify({ action: 'get_all_status' }));
-        setTimeout(autoResumeActiveBots, 600);
+        // Xác thực kết nối bằng JWT Token
+        ws.send(JSON.stringify({ action: 'auth', token: getAdminToken() }));
       };
 
       ws.onclose = () => {
@@ -765,9 +967,19 @@
     function handleServerMessage(data) {
       const { type, args = [] } = data;
 
+      if (type === 'auth_ok') {
+        setTimeout(autoResumeActiveBots, 600);
+        return;
+      } else if (type === 'auth_required' || type === 'auth_failed') {
+        setAdminToken('');
+        showAuthModal('login');
+        return;
+      }
+
       if (type === 'all_status') {
         const statuses = args[0] || {};
         const runningSet = getActiveRunningBots();
+        const stoppedSet = getUserStoppedBots();
 
         for (const [name, st] of Object.entries(statuses)) {
           if (!bots[name]) bots[name] = {};
@@ -777,15 +989,15 @@
             bots[name].current_ip = st.current_ip;
           }
 
-          // 24/7 AUTO-RESUME: Nếu bot đang trong danh sách chạy nhưng server vừa restart -> tự động kích hoạt chạy lại 100%!
-          if (runningSet.has(name) && !st.running) {
+          // 24/7 AUTO-RESUME: Chỉ tự động bật lại nếu đang chạy VÀ KHÔNG BỊ BẤM DỪNG
+          if (runningSet.has(name) && !stoppedSet.has(name) && !st.running) {
             if (ws && ws.readyState === WebSocket.OPEN) {
               const b = bots[name] || {};
               const s = b.settings || {};
               ws.send(JSON.stringify({
                 action: 'start_bot',
                 username: name,
-                password: b.password || '',
+                password: '',
                 settings: s
               }));
               appendLog(name, `🔄 [24/7] Tự động kết nối lại cho [${name}] sau khi server bảo trì/cập nhật...`, '#10b981');
@@ -797,82 +1009,16 @@
         updateItemDisplay();
       } else if (type === 'saved_accounts') {
         const rawServerAccounts = args[0] || [];
-        const delSet = getDeletedAccounts();
-        const localAccs = getLocalAccounts();
+        savedAccounts = rawServerAccounts.map(a => ({
+          username: a.username,
+          settings: a.settings || {},
+          hasPassword: !!a.hasPassword
+        }));
 
-        // Purge any deleted accounts the server might still know about
-        for (const a of rawServerAccounts) {
-          if (a && a.username && delSet.has(a.username)) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ action: 'delete_session', username: a.username }));
-            }
-          }
-        }
-
-        const filteredServerAccounts = rawServerAccounts.filter(a => a && a.username && !delSet.has(a.username));
-
-        // Build unified accounts map (local user accounts are authoritative)
-        const unifiedMap = new Map();
-
-        // 1. Load local accounts
-        for (const [name, loc] of Object.entries(localAccs)) {
-          if (!delSet.has(name)) {
-            unifiedMap.set(name, {
-              username: name,
-              settings: loc.settings || {},
-              savedPassword: loc.password || ''
-            });
-          }
-        }
-
-        // 2. Merge server accounts
-        for (const srv of filteredServerAccounts) {
-          const name = srv.username;
-          if (unifiedMap.has(name)) {
-            const loc = unifiedMap.get(name);
-            unifiedMap.set(name, {
-              username: name,
-              settings: Object.assign({}, loc.settings, srv.settings || {}),
-              savedPassword: loc.savedPassword || srv.savedPassword || ''
-            });
-          } else {
-            unifiedMap.set(name, {
-              username: name,
-              settings: srv.settings || {},
-              savedPassword: srv.savedPassword || ''
-            });
-          }
-        }
-
-        savedAccounts = Array.from(unifiedMap.values());
-
-        // Update local storage
-        const newLocalAccs = {};
         for (const acc of savedAccounts) {
-          newLocalAccs[acc.username] = {
-            username: acc.username,
-            password: acc.savedPassword || '',
-            settings: acc.settings || {}
-          };
           if (!bots[acc.username]) bots[acc.username] = {};
           bots[acc.username].settings = acc.settings || {};
-          if (acc.savedPassword) bots[acc.username].password = acc.savedPassword;
-        }
-        saveLocalAccounts(newLocalAccs);
-
-        // 3. Re-sync any accounts missing on the server (e.g. Render restart/redeploy)
-        const srvNames = new Set(filteredServerAccounts.map(a => a.username));
-        for (const acc of savedAccounts) {
-          if (!srvNames.has(acc.username)) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({
-                action: 'create_session',
-                username: acc.username,
-                password: acc.savedPassword || '',
-                settings: acc.settings || {}
-              }));
-            }
-          }
+          bots[acc.username].hasPassword = acc.hasPassword;
         }
 
         // Prune deleted bots from memory & DOM
@@ -1093,7 +1239,8 @@
           : null;
         const currentIp = bot.ip || bot.current_ip || (botProxy ? botProxy.host : (isRunning ? 'Đang kết nối...' : 'Chưa kết nối'));
         const isSelected = selectedBot === name;
-        const savedPwd = bot.password || '';
+        const hasPwd = !!(bot.hasPassword || (savedAccounts.find(a => a.username === name && a.hasPassword)));
+        const pwdPlaceholder = hasPwd ? '•••••••• (Đã lưu)' : 'Mật khẩu';
 
         let card = document.getElementById(`botcard_${name}`);
         if (!card) {
@@ -1118,8 +1265,8 @@
               </div>
             </div>
             <div class="flex items-center gap-1.5 pt-0.5" onclick="event.stopPropagation()">
-              <input type="password" id="pwd_${name}" placeholder="Mật khẩu"
-                     value="${escapeHtml(savedPwd)}"
+              <input type="password" id="pwd_${name}" placeholder="${pwdPlaceholder}"
+                     value=""
                      oninput="onPasswordChange('${name}', this.value)" 
                      onblur="savePasswordImmediate('${name}', this.value)"
                      class="w-28 bg-[#141622] border border-[#202436] rounded px-2 py-1 text-xs text-slate-100 placeholder-slate-500 font-mono outline-none focus:border-indigo-500 select-text">
@@ -1174,12 +1321,9 @@
               : '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY';
           }
 
-          // UPDATE PASSWORD VALUE ONLY IF USER IS NOT CURRENTLY TYPING IN IT
           const pwdInp = document.getElementById(`pwd_${name}`);
-          if (pwdInp && document.activeElement !== pwdInp && savedPwd !== undefined) {
-            if (pwdInp.value !== savedPwd) {
-              pwdInp.value = savedPwd;
-            }
+          if (pwdInp && document.activeElement !== pwdInp) {
+            pwdInp.placeholder = pwdPlaceholder;
           }
         }
 
@@ -1196,11 +1340,6 @@
       if (!bots[name]) bots[name] = {};
       bots[name].password = val;
 
-      const accs = getLocalAccounts();
-      if (!accs[name]) accs[name] = { username: name, settings: {} };
-      accs[name].password = val;
-      saveLocalAccounts(accs);
-
       clearTimeout(pwdDebounceTimers[name]);
       pwdDebounceTimers[name] = setTimeout(() => {
         savePasswordImmediate(name, val);
@@ -1212,20 +1351,13 @@
       bots[name].password = val;
       clearTimeout(pwdDebounceTimers[name]);
 
-      const accs = getLocalAccounts();
-      if (!accs[name]) accs[name] = { username: name, settings: {} };
-      accs[name].password = val;
-      saveLocalAccounts(accs);
-
-      const saved = savedAccounts.find(a => a.username === name);
-      if (saved) saved.savedPassword = val;
-
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (ws && ws.readyState === WebSocket.OPEN && val) {
         ws.send(JSON.stringify({
           action: 'update_password',
           username: name,
           password: val
         }));
+        appendLog(name, `🔐 Đã lưu mật khẩu an toàn vào server database cho [${name}]`, '#10b981');
       }
     }
 
@@ -1422,6 +1554,7 @@
         // INSTANT OPTIMISTIC FLIP TO STOPPED
         bot.running = false;
         setActiveRunningBot(name, false);
+        setUserStoppedBot(name, true); // ĐÁNH DẤU CHỦ ĐỘNG DỪNG - TUYỆT ĐỐI KHÔNG TỰ CHẠY LẠI
         const btnRun = document.getElementById(`btnRun_${name}`);
         if (btnRun) {
           btnRun.className = 'flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm bg-emerald-600 hover:bg-emerald-500 text-white';
@@ -1438,6 +1571,7 @@
         // INSTANT OPTIMISTIC FLIP TO RUNNING
         bot.running = true;
         setActiveRunningBot(name, true);
+        setUserStoppedBot(name, false); // XOÁ ĐÁNH DẤU DỪNG KHI NGƯỜI DÙNG BẤM CHẠY
         const btnRun = document.getElementById(`btnRun_${name}`);
         if (btnRun) {
           btnRun.className = 'flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm bg-rose-600 hover:bg-rose-500 text-white';
@@ -1448,13 +1582,13 @@
 
         const s = bot.settings || {};
         const pwdInput = document.getElementById(`pwd_${name}`);
-        const pwd = pwdInput ? pwdInput.value.trim() : (bot.password || '');
+        const pwd = pwdInput ? pwdInput.value.trim() : '';
 
         ws.send(JSON.stringify({
           action: 'start_bot',
           username: name,
           password: pwd,
-          farm_range: s.farm_range !== undefined ? s.farm_range : 2.9,
+          farm_range: s.farm_range !== undefined ? s.farm_range : 4.0,
           farm_radius: s.farm_radius !== undefined ? s.farm_radius : 20.0,
           farm_min_delay: s.farm_min_delay !== undefined ? s.farm_min_delay : 0.5,
           farm_max_delay: s.farm_max_delay !== undefined ? s.farm_max_delay : 0.8,
@@ -1485,20 +1619,10 @@
       const name = (input.value || '').trim();
       if (!name) return;
 
-      // If marked deleted, remove from deleted list
-      const delSet = getDeletedAccounts();
-      if (delSet.has(name)) {
-        delSet.delete(name);
-        localStorage.setItem('mc_deleted_accounts', JSON.stringify(Array.from(delSet)));
-      }
-
-      const accs = getLocalAccounts();
-      accs[name] = { username: name, password: '', settings: {} };
-      saveLocalAccounts(accs);
-
-      if (!bots[name]) bots[name] = { username: name, password: '', settings: {} };
+      setUserStoppedBot(name, true);
+      if (!bots[name]) bots[name] = { username: name, settings: {} };
       if (!savedAccounts.find(a => a.username === name)) {
-        savedAccounts.push({ username: name, settings: {}, savedPassword: '' });
+        savedAccounts.push({ username: name, settings: {}, hasPassword: false });
       }
 
       input.value = '';
@@ -1516,12 +1640,10 @@
       }
     }
 
-    // ── FIXED DELETE SESSION: INSTANT COMPLETE PURGE (NO GHOSTS, NO ROLLBACKS) ──
     function deleteBot(name) {
       if (!confirm(`Xác nhận xóa hoàn toàn session [${name}]?`)) return;
       
-      // Immediate authoritative local cleanup
-      markAccountDeleted(name);
+      setUserStoppedBot(name, true);
       delete bots[name];
       savedAccounts = savedAccounts.filter(a => a.username !== name);
       const card = document.getElementById(`botcard_${name}`);
@@ -1534,7 +1656,6 @@
       updateDropdown();
       renderChatHistory();
 
-      // Server purge
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ action: 'delete_session', username: name }));
       }
@@ -1747,14 +1868,8 @@
       if (!bots[name]) bots[name] = {};
       bots[name].settings = newSettings;
 
-      const accs = getLocalAccounts();
-      if (!accs[name]) accs[name] = { username: name, password: bots[name].password || '' };
-      accs[name].settings = newSettings;
-      saveLocalAccounts(accs);
-
       const newPwd = document.getElementById('cfgBotPassword').value;
-      if (newPwd !== undefined) {
-        bots[name].password = newPwd;
+      if (newPwd) {
         ws.send(JSON.stringify({
           action: 'update_password',
           username: name,
@@ -1770,28 +1885,11 @@
 
       appendLog(name, `Đã cập nhật cấu hình & Proxy SOCKS5 cho [${name}]`, '#10b981');
       closeSettingsModal();
-      renderBots();
+      scheduleRenderBots();
     }
 
     // ── INITIALIZATION & PREFERENCES RESTORATION ──
-    // Server holds chat history (capped at 500 lines); client holds 0 in storage
-    const initAccs = getLocalAccounts();
-    const initDelSet = getDeletedAccounts();
-    for (const [name, acc] of Object.entries(initAccs)) {
-      if (!initDelSet.has(name)) {
-        savedAccounts.push({
-          username: name,
-          settings: acc.settings || {},
-          savedPassword: acc.password || ''
-        });
-        bots[name] = {
-          username: name,
-          password: acc.password || '',
-          settings: acc.settings || {},
-          running: false
-        };
-      }
-    }
+    // Server holds accounts and database securely.
     renderBots();
     updateDropdown();
 
@@ -1806,7 +1904,7 @@
       document.getElementById('chkHideChat').checked = savedHideChat;
     }
 
-    if (savedBotPref && savedBotPref !== '__all__' && bots[savedBotPref]) {
+    if (savedBotPref && savedBotPref !== '__all__') {
       selectedBot = savedBotPref;
       const badge = document.getElementById('activeBotBadge');
       if (badge) {
@@ -1815,7 +1913,7 @@
       }
       const chatInp = document.getElementById('chatInput');
       if (chatInp) {
-        chatInp.placeholder = "Nhập tin nhắn hoặc lệnh...";
+        chatInp.placeholder = `Nhập tin nhắn hoặc lệnh cho ${selectedBot}...`;
       }
       updateDropdown();
     } else {
@@ -1824,7 +1922,8 @@
       updateDropdown();
     }
 
-    initWs();
+    // Khởi động kiểm tra xác thực Admin JWT Bearer Token
+    checkAdminAuth();
   </script>
 </body>
 </html>
