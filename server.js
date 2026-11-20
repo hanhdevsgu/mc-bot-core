@@ -718,6 +718,7 @@ function getAllStatuses() {
             auto_farm: bot.auto_farm_running,
             auto_storage: bot.auto_storage_running,
             current_ip: bot.current_ip,
+            item: bot.item || 'Tay không (Trống)',
             password: bot.password || ''
         };
     }

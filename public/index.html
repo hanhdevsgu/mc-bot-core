@@ -211,12 +211,17 @@
           </div>
         </div>
 
-        <!-- ITEM RADAR / COMPASS -->
-        <div id="itemDisplay" class="bg-[#0a0b10] border border-[#202436] rounded-md px-2.5 py-1.5 text-xs text-slate-400 font-mono flex items-center gap-2">
-          <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="12 2 15 9 22 9 17 14 19 21 12 17 5 21 7 14 2 9 9 9 12 2"/>
-          </svg>
-          <span>Compass</span>
+        <!-- HOTBAR / ĐANG CẦM TRÊN TAY -->
+        <div class="bg-[#0a0b10] border border-[#202436] rounded-md px-2.5 py-1.5 text-xs flex items-center justify-between">
+          <div class="flex items-center gap-2 min-w-0">
+            <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <path d="M16 10a4 4 0 0 1-8 0"/>
+            </svg>
+            <span class="text-slate-400 text-[11px] font-medium shrink-0">Đang cầm:</span>
+            <span id="itemDisplay" class="font-mono text-emerald-400 font-semibold truncate text-[11.5px]">Tay không</span>
+          </div>
         </div>
       </div>
 
@@ -684,6 +689,7 @@
         }
         scheduleRenderBots();
         updateSelectedUI();
+        updateItemDisplay();
       } else if (type === 'saved_accounts') {
         savedAccounts = args[0] || [];
         const validNames = new Set(savedAccounts.map(a => a.username));
@@ -746,14 +752,10 @@
         scheduleRenderBots();
       } else if (type === 'item') {
         const [username, item] = args;
-        if (bots[username]) bots[username].item = item;
+        if (!bots[username]) bots[username] = {};
+        bots[username].item = item;
         if (selectedBot === username) {
-          document.getElementById('itemDisplay').innerHTML = `
-            <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="12 2 15 9 22 9 17 14 19 21 12 17 5 21 7 14 2 9 9 9 12 2"/>
-            </svg>
-            <span>${item ? escapeHtml(item) : 'Compass'}</span>
-          `;
+          updateItemDisplay();
         }
       }
     }
@@ -1010,7 +1012,23 @@
 
       renderBots();
       updateSelectedUI();
+      updateItemDisplay();
       if (updateChat) renderChatHistory();
+    }
+
+    function updateItemDisplay() {
+      const el = document.getElementById('itemDisplay');
+      if (!el) return;
+      if (!selectedBot) {
+        el.innerText = 'Chưa chọn bot';
+        el.className = 'font-mono text-slate-500 font-medium truncate text-[11.5px]';
+        return;
+      }
+      const item = (bots[selectedBot] && bots[selectedBot].item) || 'Tay không (Trống)';
+      el.innerText = item;
+      el.className = (item.includes('Tay không') || item.includes('Trống'))
+        ? 'font-mono text-slate-400 font-medium truncate text-[11.5px]'
+        : 'font-mono text-emerald-400 font-bold truncate text-[11.5px]';
     }
 
     // ── CUSTOM DARK DROPDOWN LOGIC ──
@@ -1391,6 +1409,10 @@
       const proxyUser = document.getElementById('cfgProxyUser').value.trim();
       const proxyPass = document.getElementById('cfgProxyPass').value.trim();
 
+      const existingProxy = (bots[name] && bots[name].settings && bots[name].settings.proxy) || {};
+      const finalProxyUser = proxyUser !== '' ? proxyUser : (existingProxy.user || '');
+      const finalProxyPass = proxyPass !== '' ? proxyPass : (existingProxy.pass || '');
+
       const newSettings = {
         farm_range: parseFloat(document.getElementById('cfgFarmRange').value) || 2.9,
         farm_radius: parseFloat(document.getElementById('cfgFarmRadius').value) || 20.0,
@@ -1417,8 +1439,8 @@
           host: proxyHost,
           port: proxyPort ? parseInt(proxyPort, 10) : 1080,
           type: 5,
-          user: proxyUser || undefined,
-          pass: proxyPass || undefined
+          user: finalProxyUser || undefined,
+          pass: finalProxyPass || undefined
         }
       };
 

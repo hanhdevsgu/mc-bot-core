@@ -559,11 +559,11 @@ class BotInstance {
 
                     SocksClient.createConnection({
                         proxy: {
-                            host: proxy.host,
+                            host: String(proxy.host).trim(),
                             port: parseInt(proxy.port, 10),
                             type: proxy.type || 5,
-                            userId: proxy.user || undefined,
-                            password: proxy.pass || undefined,
+                            userId: proxyUser,
+                            password: proxyPass,
                         },
                         command: 'connect',
                         destination: { host: 'api.ipify.org', port: 443 },
@@ -2544,14 +2544,16 @@ class BotInstance {
             const { SocksClient } = require('socks');
             const proxy = this.proxy;
 
+            const proxyUser = (proxy.user && typeof proxy.user === 'string' && proxy.user.trim()) ? proxy.user.trim() : undefined;
+            const proxyPass = (proxy.pass && typeof proxy.pass === 'string' && proxy.pass.trim()) ? proxy.pass.trim() : undefined;
             botOptions.connect = (client) => {
                 SocksClient.createConnection({
                     proxy: {
-                        host: proxy.host,
+                        host: String(proxy.host).trim(),
                         port: parseInt(proxy.port, 10),
                         type: proxy.type || 5,
-                        userId: proxy.user || undefined,
-                        password: proxy.pass || undefined,
+                        userId: proxyUser,
+                        password: proxyPass,
                     },
                     command: 'connect',
                     destination: {
@@ -2560,7 +2562,11 @@ class BotInstance {
                     },
                 }, (err, info) => {
                     if (err) {
-                        this.log(`❌ Không kết nối được qua proxy: ${err.message}`, '#ff4d6d');
+                        let pMsg = err.message || String(err);
+                        if (pMsg.includes('Authentication failed')) {
+                            pMsg = 'Socks5 Authentication failed (Sai User/Pass Proxy hoặc Proxy yêu cầu User/Pass nhưng chưa điền đúng)';
+                        }
+                        this.log(`❌ Không kết nối được qua proxy: ${pMsg}`, '#ff4d6d');
                         client.emit('error', err);
                         return;
                     }
@@ -2672,6 +2678,12 @@ class BotInstance {
                     this.log(`🌍 Đã spawn vào server`, '#2ecc71');
                     this.sendStatus();
                     this.checkHeldItem();
+                    try {
+                        this.bot.on('heldItemChanged', (ent) => {
+                            if (!this.bot) return;
+                            if (!ent || ent === this.bot.entity) this.sendHeldItem();
+                        });
+                    } catch (e) {}
                     this.logTargetItemDebugName();
 
                     try {
@@ -2849,19 +2861,26 @@ class BotInstance {
         }
     }
 
+    sendHeldItem() {
+        if (!this.bot || !this.running) return;
+        try {
+            const held = this.bot.heldItem;
+            let itemName = "Tay không (Trống)";
+            if (held) {
+                const count = held.count && held.count > 1 ? (" x" + held.count) : "";
+                itemName = (held.displayName || held.name || "Unknown") + count;
+            }
+            if (this._lastReportedItem !== itemName) {
+                this._lastReportedItem = itemName;
+                this.sendItem(itemName);
+            }
+        } catch (e) {}
+    }
+
     checkHeldItem() {
         if (!this.bot || !this.running) return;
-        setTimeout(() => {
-            if (!this.bot || !this.running) return;
-            try {
-                const held = this.bot.heldItem;
-                if (held) {
-                    const name = held.displayName || held.name || 'Unknown';
-                    this.sendItem(name);
-                    this.log(`🎒 ${name}`, '#f5c842');
-                }
-            } catch (e) {}
-        }, 1000);
+        setTimeout(() => this.sendHeldItem(), 600);
+        setTimeout(() => this.sendHeldItem(), 2000);
     }
 
     sleep(ms) {
