@@ -2545,16 +2545,19 @@ class BotInstance {
             const proxy = this.proxy;
 
             const proxyUser = (proxy.user && typeof proxy.user === 'string' && proxy.user.trim()) ? proxy.user.trim() : undefined;
-            const proxyPass = (proxy.pass && typeof proxy.pass === 'string' && proxy.pass.trim()) ? proxy.pass.trim() : undefined;
+            const proxyPass = (proxy.pass && typeof proxy.pass === 'string' && proxy.pass.trim()) ? proxy.pass.trim() : (proxyUser ? '' : undefined);
             botOptions.connect = (client) => {
+                const proxyCfg = {
+                    host: String(proxy.host).trim(),
+                    port: parseInt(proxy.port, 10),
+                    type: proxy.type || 5
+                };
+                if (proxyUser) {
+                    proxyCfg.userId = proxyUser;
+                    proxyCfg.password = proxyPass !== undefined ? proxyPass : '';
+                }
                 SocksClient.createConnection({
-                    proxy: {
-                        host: String(proxy.host).trim(),
-                        port: parseInt(proxy.port, 10),
-                        type: proxy.type || 5,
-                        userId: proxyUser,
-                        password: proxyPass,
-                    },
+                    proxy: proxyCfg,
                     command: 'connect',
                     destination: {
                         host: this.host,

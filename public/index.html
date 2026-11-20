@@ -197,7 +197,7 @@
           <button id="botDropdownBtn" onclick="toggleBotDropdown(event)" type="button"
                   class="w-full bg-[#0a0b10] hover:bg-[#141622] border border-[#202436] rounded-md px-2.5 py-1.5 text-xs text-slate-200 flex items-center justify-between transition cursor-pointer select-none">
             <div class="flex items-center gap-2 min-w-0">
-              <span id="botDropdownIcon" class="text-sm shrink-0">🌐</span>
+              <span id="botDropdownIcon" class="shrink-0 flex items-center"><svg class="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
               <span id="botDropdownLabel" class="font-medium text-xs truncate">Tất cả bot (Xem chung)</span>
             </div>
             <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1.5 transition-transform duration-150" id="botDropdownArrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -566,6 +566,42 @@
     let renderBotsScheduled = false;
     let pwdDebounceTimers = {};
 
+    // ── LOCAL STORAGE ACCOUNT PERSISTENCE & ANTI-ROLLBACK AUTHORITY ──
+    function getLocalAccounts() {
+      try {
+        const raw = localStorage.getItem('mc_user_saved_accounts');
+        return raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveLocalAccounts(accs) {
+      try {
+        localStorage.setItem('mc_user_saved_accounts', JSON.stringify(accs));
+      } catch (e) {}
+    }
+
+    function getDeletedAccounts() {
+      try {
+        const raw = localStorage.getItem('mc_deleted_accounts');
+        return new Set(raw ? JSON.parse(raw) : []);
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function markAccountDeleted(name) {
+      const delSet = getDeletedAccounts();
+      delSet.add(name);
+      localStorage.setItem('mc_deleted_accounts', JSON.stringify(Array.from(delSet)));
+
+      const accs = getLocalAccounts();
+      delete accs[name];
+      saveLocalAccounts(accs);
+    }
+
+
     function escapeHtml(s) {
       return (s || '')
         .replace(/&/g, '&amp;')
@@ -691,23 +727,92 @@
         updateSelectedUI();
         updateItemDisplay();
       } else if (type === 'saved_accounts') {
-        savedAccounts = args[0] || [];
+        const rawServerAccounts = args[0] || [];
+        const delSet = getDeletedAccounts();
+        const localAccs = getLocalAccounts();
+
+        // Purge any deleted accounts the server might still know about
+        for (const a of rawServerAccounts) {
+          if (a && a.username && delSet.has(a.username)) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ action: 'delete_session', username: a.username }));
+            }
+          }
+        }
+
+        const filteredServerAccounts = rawServerAccounts.filter(a => a && a.username && !delSet.has(a.username));
+
+        // Build unified accounts map (local user accounts are authoritative)
+        const unifiedMap = new Map();
+
+        // 1. Load local accounts
+        for (const [name, loc] of Object.entries(localAccs)) {
+          if (!delSet.has(name)) {
+            unifiedMap.set(name, {
+              username: name,
+              settings: loc.settings || {},
+              savedPassword: loc.password || ''
+            });
+          }
+        }
+
+        // 2. Merge server accounts
+        for (const srv of filteredServerAccounts) {
+          const name = srv.username;
+          if (unifiedMap.has(name)) {
+            const loc = unifiedMap.get(name);
+            unifiedMap.set(name, {
+              username: name,
+              settings: Object.assign({}, loc.settings, srv.settings || {}),
+              savedPassword: loc.savedPassword || srv.savedPassword || ''
+            });
+          } else {
+            unifiedMap.set(name, {
+              username: name,
+              settings: srv.settings || {},
+              savedPassword: srv.savedPassword || ''
+            });
+          }
+        }
+
+        savedAccounts = Array.from(unifiedMap.values());
+
+        // Update local storage
+        const newLocalAccs = {};
+        for (const acc of savedAccounts) {
+          newLocalAccs[acc.username] = {
+            username: acc.username,
+            password: acc.savedPassword || '',
+            settings: acc.settings || {}
+          };
+          if (!bots[acc.username]) bots[acc.username] = {};
+          bots[acc.username].settings = acc.settings || {};
+          if (acc.savedPassword) bots[acc.username].password = acc.savedPassword;
+        }
+        saveLocalAccounts(newLocalAccs);
+
+        // 3. Re-sync any accounts missing on the server (e.g. Render restart/redeploy)
+        const srvNames = new Set(filteredServerAccounts.map(a => a.username));
+        for (const acc of savedAccounts) {
+          if (!srvNames.has(acc.username)) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                action: 'create_session',
+                username: acc.username,
+                password: acc.savedPassword || '',
+                settings: acc.settings || {}
+              }));
+            }
+          }
+        }
+
+        // Prune deleted bots from memory & DOM
         const validNames = new Set(savedAccounts.map(a => a.username));
-        // Prune deleted bots from memory
         for (const n of Object.keys(bots)) {
           if (!validNames.has(n) && !bots[n].running) {
             delete bots[n];
             const el = document.getElementById(`botcard_${n}`);
             if (el) el.remove();
-          }
-        }
-        for (const acc of savedAccounts) {
-          if (!bots[acc.username]) bots[acc.username] = {};
-          bots[acc.username].settings = acc.settings || {};
-          if (acc.savedPassword) {
-            bots[acc.username].password = acc.savedPassword;
-          } else if (!bots[acc.username].password) {
-            bots[acc.username].password = '';
           }
         }
 
@@ -880,7 +985,7 @@
           card.innerHTML = `
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
-                <span id="stIcon_${name}" class="${isRunning ? 'text-emerald-400' : 'text-slate-500'} text-xs font-bold">${isRunning ? '►' : '⏸'}</span>
+                <span id="stDot_${name}" class="w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0"></span>
                 <span id="stName_${name}" class="font-bold text-xs ${isRunning ? 'text-emerald-400' : 'text-slate-200'}">${escapeHtml(name)}</span>
               </div>
               <div class="flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-[#0a0b10] px-2 py-0.5 rounded border border-[#202436]">
@@ -904,12 +1009,14 @@
                 </svg>
               </button>
 
-              <button id="btnRun_${name}" onclick="event.stopPropagation(); toggleBotRun('${name}')" class="flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1 transition shadow-sm ${
+              <button id="btnRun_${name}" onclick="event.stopPropagation(); toggleBotRun('${name}')" class="flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${
                 isRunning 
                   ? 'bg-rose-600 hover:bg-rose-500 text-white' 
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white'
               }">
-                ${isRunning ? '■ DỪNG' : '► CHẠY'}
+                ${isRunning 
+                  ? '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG' 
+                  : '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY'}
               </button>
 
               <button onclick="event.stopPropagation(); deleteBot('${name}')" title="Xóa session hoàn toàn" class="p-1.5 text-rose-400 hover:text-white bg-rose-600/15 hover:bg-rose-600 border border-rose-500/30 rounded transition shadow-sm">
@@ -923,10 +1030,9 @@
           card.onclick = () => selectBot(name);
         } else {
           // CARD ALREADY EXISTS: ONLY UPDATE DYNAMIC VALUES (NEVER OVERWRITE INNERHTML OR INPUT)
-          const iconEl = document.getElementById(`stIcon_${name}`);
-          if (iconEl) {
-            iconEl.className = `${isRunning ? 'text-emerald-400' : 'text-slate-500'} text-xs font-bold`;
-            iconEl.innerText = isRunning ? '►' : '⏸';
+          const dotEl = document.getElementById(`stDot_${name}`);
+          if (dotEl) {
+            dotEl.className = `w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0`;
           }
 
           const nameEl = document.getElementById(`stName_${name}`);
@@ -939,10 +1045,12 @@
 
           const btnRun = document.getElementById(`btnRun_${name}`);
           if (btnRun) {
-            btnRun.className = `flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1 transition shadow-sm ${
+            btnRun.className = `flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${
               isRunning ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
             }`;
-            btnRun.innerText = isRunning ? '■ DỪNG' : '► CHẠY';
+            btnRun.innerHTML = isRunning 
+              ? '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG' 
+              : '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY';
           }
 
           // UPDATE PASSWORD VALUE ONLY IF USER IS NOT CURRENTLY TYPING IN IT
@@ -966,6 +1074,12 @@
     function onPasswordChange(name, val) {
       if (!bots[name]) bots[name] = {};
       bots[name].password = val;
+
+      const accs = getLocalAccounts();
+      if (!accs[name]) accs[name] = { username: name, settings: {} };
+      accs[name].password = val;
+      saveLocalAccounts(accs);
+
       clearTimeout(pwdDebounceTimers[name]);
       pwdDebounceTimers[name] = setTimeout(() => {
         savePasswordImmediate(name, val);
@@ -976,6 +1090,15 @@
       if (!bots[name]) bots[name] = {};
       bots[name].password = val;
       clearTimeout(pwdDebounceTimers[name]);
+
+      const accs = getLocalAccounts();
+      if (!accs[name]) accs[name] = { username: name, settings: {} };
+      accs[name].password = val;
+      saveLocalAccounts(accs);
+
+      const saved = savedAccounts.find(a => a.username === name);
+      if (saved) saved.savedPassword = val;
+
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           action: 'update_password',
@@ -1077,7 +1200,7 @@
           !selectedBot ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-[#202538] hover:text-white'
         }">
           <div class="flex items-center gap-2">
-            <span>🌐</span>
+            <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             <span>Tất cả bot (Xem chung)</span>
           </div>
           ${!selectedBot ? '<span class="text-xs">✓</span>' : ''}
@@ -1092,7 +1215,7 @@
             isSel ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-[#202538] hover:text-white'
           }">
             <div class="flex items-center gap-2 truncate">
-              <span class="text-xs ${isRun ? 'text-emerald-400' : 'text-slate-500'}">🤖</span>
+              <span class="w-2 h-2 rounded-full ${isRun ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0"></span>
               <span class="truncate font-semibold">${escapeHtml(name)}</span>
             </div>
             ${isSel ? '<span class="text-xs">✓</span>' : ''}
@@ -1105,10 +1228,11 @@
       const iconEl = document.getElementById('botDropdownIcon');
       const labelEl = document.getElementById('botDropdownLabel');
       if (selectedBot) {
-        if (iconEl) iconEl.innerText = '🤖';
+        const isRun = bots[selectedBot] && bots[selectedBot].running;
+        if (iconEl) iconEl.innerHTML = `<span class="w-2 h-2 rounded-full ${isRun ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0"></span>`;
         if (labelEl) labelEl.innerText = selectedBot;
       } else {
-        if (iconEl) iconEl.innerText = '🌐';
+        if (iconEl) iconEl.innerHTML = '<svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
         if (labelEl) labelEl.innerText = 'Tất cả bot (Xem chung)';
       }
     }
@@ -1206,24 +1330,46 @@
 
     function createBot() {
       const input = document.getElementById('newUsername');
-      const name = input.value.trim();
+      const name = (input.value || '').trim();
       if (!name) return;
 
-      ws.send(JSON.stringify({
-        action: 'create_session',
-        username: name,
-        password: '',
-        settings: {}
-      }));
+      // If marked deleted, remove from deleted list
+      const delSet = getDeletedAccounts();
+      if (delSet.has(name)) {
+        delSet.delete(name);
+        localStorage.setItem('mc_deleted_accounts', JSON.stringify(Array.from(delSet)));
+      }
+
+      const accs = getLocalAccounts();
+      accs[name] = { username: name, password: '', settings: {} };
+      saveLocalAccounts(accs);
+
+      if (!bots[name]) bots[name] = { username: name, password: '', settings: {} };
+      if (!savedAccounts.find(a => a.username === name)) {
+        savedAccounts.push({ username: name, settings: {}, savedPassword: '' });
+      }
+
       input.value = '';
       selectBot(name);
+      scheduleRenderBots();
+      updateDropdown();
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          action: 'create_session',
+          username: name,
+          password: '',
+          settings: {}
+        }));
+      }
     }
 
     // ── FIXED DELETE SESSION: INSTANT COMPLETE PURGE (NO GHOSTS, NO ROLLBACKS) ──
     function deleteBot(name) {
       if (!confirm(`Xác nhận xóa hoàn toàn session [${name}]?`)) return;
       
-      // Immediate local cleanup
+      // Immediate authoritative local cleanup
+      markAccountDeleted(name);
       delete bots[name];
       savedAccounts = savedAccounts.filter(a => a.username !== name);
       const card = document.getElementById(`botcard_${name}`);
@@ -1237,7 +1383,9 @@
       renderChatHistory();
 
       // Server purge
-      ws.send(JSON.stringify({ action: 'delete_session', username: name }));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'delete_session', username: name }));
+      }
     }
 
     function sendChat() {
@@ -1447,6 +1595,11 @@
       if (!bots[name]) bots[name] = {};
       bots[name].settings = newSettings;
 
+      const accs = getLocalAccounts();
+      if (!accs[name]) accs[name] = { username: name, password: bots[name].password || '' };
+      accs[name].settings = newSettings;
+      saveLocalAccounts(accs);
+
       const newPwd = document.getElementById('cfgBotPassword').value;
       if (newPwd !== undefined) {
         bots[name].password = newPwd;
@@ -1469,6 +1622,26 @@
     }
 
     // ── INITIALIZATION & PREFERENCES RESTORATION ──
+    const initAccs = getLocalAccounts();
+    const initDelSet = getDeletedAccounts();
+    for (const [name, acc] of Object.entries(initAccs)) {
+      if (!initDelSet.has(name)) {
+        savedAccounts.push({
+          username: name,
+          settings: acc.settings || {},
+          savedPassword: acc.password || ''
+        });
+        bots[name] = {
+          username: name,
+          password: acc.password || '',
+          settings: acc.settings || {},
+          running: false
+        };
+      }
+    }
+    renderBots();
+    updateDropdown();
+
     const savedBotPref = localStorage.getItem('mc_bot_selected');
     const savedHideDebug = localStorage.getItem('mc_bot_hide_debug') === 'true';
     const savedHideChat = localStorage.getItem('mc_bot_hide_chat') === 'true';

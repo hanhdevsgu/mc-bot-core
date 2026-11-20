@@ -280,6 +280,12 @@ function startBot(username, password, opts = {}) {
     }
     if (autoStartStorage) effectiveSettings.storage_autostart_on_join = true;
 
+    if (session) {
+        session.password = password || session.password || '';
+        session.settings = effectiveSettings;
+        saveSession(username, session);
+    }
+
     if (!isAutoRestart) {
         crashRetryCounts[username] = 0;
     }
@@ -1139,6 +1145,13 @@ function startWsServer() {
                             try { if (fs.existsSync(file1)) fs.unlinkSync(file1); } catch (e) {}
                             try { if (fs.existsSync(file2)) fs.unlinkSync(file2); } catch (e) {}
                             removeFromAccountsJson(username);
+                            try {
+                                const rs = loadRunningState();
+                                if (rs[username]) {
+                                    delete rs[username];
+                                    fs.writeFileSync(RUNNING_STATE_FILE, JSON.stringify(rs, null, 2), 'utf-8');
+                                }
+                            } catch (e) {}
                             delete bots[username];
                             sendToPython('saved_accounts', listSavedSessions());
                             sendToPython('all_status', getAllStatuses());
