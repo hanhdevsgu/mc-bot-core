@@ -126,5 +126,24 @@
     "move_delta_x": 1.0,
     "move_delta_y": 0.0,
     "move_delta_z": 0.0
+  },
+  {
+    "username": "LayCuDP",
+    "password": "",
+    "farm_range": 2.9,
+    "farm_radius": 20.0,
+    "farm_min_delay": 0.5,
+    "farm_max_delay": 0.8,
+    "farm_smart_aim": false,
+    "farm_lookat": true,
+    "afk_persist": true,
+    "farm_persist": true,
+    "proxy": {
+      "enabled": true,
+      "host": "xxproxy.ddns.net",
+      "port": 12804,
+      "type": 5,
+      "user": "xxproxy.com"
+    }
   }
 ]

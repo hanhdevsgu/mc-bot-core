@@ -26,6 +26,59 @@ if (!fs.existsSync(SESSION_DIR)) {
     fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
 
+function syncToAccountsJson(username, data) {
+    try {
+        if (!fs.existsSync(SESSION_DIR)) {
+            fs.mkdirSync(SESSION_DIR, { recursive: true });
+        }
+        const accFile = path.join(SESSION_DIR, 'accounts.json');
+        let accList = [];
+        if (fs.existsSync(accFile)) {
+            try {
+                accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
+                if (!Array.isArray(accList)) accList = [];
+            } catch (e) {
+                accList = [];
+            }
+        }
+        let found = false;
+        const entry = {
+            username: username,
+            password: data.password !== undefined ? data.password : '',
+            ...(data.settings || {})
+        };
+        for (let i = 0; i < accList.length; i++) {
+            if (accList[i] && accList[i].username === username) {
+                accList[i] = Object.assign({}, accList[i], entry);
+                if (data.password !== undefined && data.password !== '') {
+                    accList[i].password = data.password;
+                }
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            accList.push(entry);
+        }
+        fs.writeFileSync(accFile, JSON.stringify(accList, null, 2), 'utf-8');
+    } catch (e) {
+        console.error('⚠️ Lỗi syncToAccountsJson:', e);
+    }
+}
+
+function removeFromAccountsJson(username) {
+    try {
+        const accFile = path.join(SESSION_DIR, 'accounts.json');
+        if (fs.existsSync(accFile)) {
+            let accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
+            if (Array.isArray(accList)) {
+                accList = accList.filter(a => a && a.username !== username);
+                fs.writeFileSync(accFile, JSON.stringify(accList, null, 2), 'utf-8');
+            }
+        }
+    } catch (e) {}
+}
+
 function loadSession(username) {
     const file = path.join(SESSION_DIR, `${username}.json`);
     if (fs.existsSync(file)) {
@@ -33,18 +86,37 @@ function loadSession(username) {
             return JSON.parse(fs.readFileSync(file, 'utf-8'));
         } catch (e) {}
     }
+    // Fallback: search accounts.json
+    try {
+        const accFile = path.join(SESSION_DIR, 'accounts.json');
+        if (fs.existsSync(accFile)) {
+            const accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
+            if (Array.isArray(accList)) {
+                const found = accList.find(a => a && a.username === username);
+                if (found) {
+                    return createSession(username, found.password, found);
+                }
+            }
+        }
+    } catch (e) {}
     return null;
 }
 
 function saveSession(username, data) {
+    if (!fs.existsSync(SESSION_DIR)) {
+        fs.mkdirSync(SESSION_DIR, { recursive: true });
+    }
     const file = path.join(SESSION_DIR, `${username}.json`);
     fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+    syncToAccountsJson(username, data);
 }
 
-function createSession(username) {
+function createSession(username, password = '', initialSettings = {}) {
     const fake_uuid = uuidv4();
     const session = {
         username: username,
+        password: password || '',
+        settings: initialSettings || {},
         session: {
             accessToken: `tlauncher_${username}_${fake_uuid}`,
             clientToken: fake_uuid,
@@ -721,8 +793,15 @@ function startWsServer() {
 
                 switch (action) {
                     case 'start_bot':
-                        if (username && password) {
-                            startBot(username, password, {
+                        if (username) {
+                            let s = loadSession(username);
+                            if (!s) s = createSession(username);
+                            if (password) {
+                                s.password = password;
+                                saveSession(username, s);
+                            }
+                            const botPassword = password || s.password || '';
+                            startBot(username, botPassword, {
                                 settings: {
                                     farm_range, farm_radius, farm_min_delay,
                                     farm_max_delay, afk_persist, farm_persist, storage_persist, proxy,
@@ -743,6 +822,7 @@ function startWsServer() {
                                     farm_smart_aim, farm_lookat
                                 }
                             });
+                            sendToPython('saved_accounts', listSavedSessions());
                         }
                         break;
 
@@ -1000,11 +1080,22 @@ function startWsServer() {
                         sendToPython('saved_accounts', listSavedSessions());
                         break;
 
+                    case 'update_password':
+                        if (username) {
+                            let s = loadSession(username);
+                            if (!s) s = createSession(username);
+                            s.password = password !== undefined ? password : '';
+                            saveSession(username, s);
+                            if (bots[username]) bots[username].password = s.password;
+                            sendToPython('saved_accounts', listSavedSessions());
+                        }
+                        break;
+
                     case 'create_session':
                         if (username) {
                             let s = loadSession(username);
                             if (!s) {
-                                s = createSession(username);
+                                s = createSession(username, password || '');
                             }
                             if (password) s.password = password;
                             if (box_settings || settings) {
@@ -1022,6 +1113,7 @@ function startWsServer() {
                             }
                             const file = path.join(SESSION_DIR, `${username}.json`);
                             try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (e) {}
+                            removeFromAccountsJson(username);
                             delete bots[username];
                             sendToPython('saved_accounts', listSavedSessions());
                             sendToPython('all_status', getAllStatuses());
