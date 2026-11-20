@@ -967,6 +967,23 @@
       }
     }
 
+    let isUserReadingChat = false;
+
+    // Smart scroll: theo dõi khi nào người dùng chủ động cuộn lên giữa màn hình để đọc chat cũ
+    window.addEventListener('DOMContentLoaded', () => {
+      const body = document.getElementById('chatBody');
+      if (body) {
+        body.addEventListener('scroll', () => {
+          const distFromBottom = body.scrollHeight - body.clientHeight - body.scrollTop;
+          if (distFromBottom > 180) {
+            isUserReadingChat = true;
+          } else if (distFromBottom <= 50) {
+            isUserReadingChat = false;
+          }
+        }, { passive: true });
+      }
+    });
+
     function appendLog(tag, msg, color, timestamp) {
       const now = new Date();
       const timeStr = timestamp || `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
@@ -995,7 +1012,6 @@
       }
       logQueue = [];
       body.appendChild(frag);
-      saveLocalChat(allChatHistory);
 
       const excess = body.children.length - MAX_DOM_LINES;
       if (excess > 0) {
@@ -1003,9 +1019,9 @@
           body.removeChild(body.firstChild);
         }
       }
-      // Smart scroll: only auto-scroll if user is already near bottom (avoids scroll lag)
-      const isNearBottom = body.scrollHeight - body.clientHeight <= body.scrollTop + 60;
-      if (isNearBottom) {
+      // Smart scroll: luôn tự động cuộn xuống dưới cùng để thấy chat mới nhất,
+      // chỉ dừng lại khi người dùng chủ động kéo lên giữa để đọc tin cũ.
+      if (!isUserReadingChat) {
         body.scrollTop = body.scrollHeight;
       }
     }
@@ -1025,7 +1041,9 @@
         frag.appendChild(line);
       }
       body.appendChild(frag);
-      body.scrollTop = body.scrollHeight;
+      if (!isUserReadingChat) {
+        body.scrollTop = body.scrollHeight;
+      }
     }
 
     function clearChat() {
@@ -1242,6 +1260,7 @@
       renderBots();
       updateSelectedUI();
       updateItemDisplay();
+      isUserReadingChat = false;
       if (updateChat) renderChatHistory();
     }
 

@@ -39,6 +39,7 @@ class BotInstance {
         this._spawn_logged = false;
         this._verify_join_running = false;
         this._dn_sent = false;
+        this.is_authenticated = false;
 
         this._compass_opened = false;
         this.reconnect_count = 0;
@@ -85,7 +86,7 @@ class BotInstance {
         this._maxConsecutiveMissTimeouts = settings.farm_max_consecutive_miss !== undefined
             ? settings.farm_max_consecutive_miss : 4;
 
-        this.farm_debug = settings.farm_debug !== undefined ? settings.farm_debug : false;
+        this.farm_debug = settings.farm_debug !== undefined ? settings.farm_debug : true;
 
         this.farm_smart_aim = false;
         this.farm_lookat = settings.farm_lookat !== undefined ? settings.farm_lookat : true;
@@ -126,7 +127,7 @@ class BotInstance {
         // AFK và Farm chạy chồng nhau dù GUI chỉ tick Farm. Đổi mặc định về false (giống
         // farm_persist) để chỉ chế độ nào người dùng thực sự bật mới tự khôi phục lại.
         this.afk_persist = settings.afk_persist !== undefined ? settings.afk_persist : false;
-        this.farm_persist = settings.farm_persist !== undefined ? settings.farm_persist : false;
+        this.farm_persist = settings.farm_persist !== undefined ? settings.farm_persist : true;
 
         this.storage_persist = settings.storage_persist !== undefined ? settings.storage_persist : false;
         this.target_amount = settings.target_amount !== undefined ? settings.target_amount : 0;
@@ -198,9 +199,9 @@ class BotInstance {
         this._hardResetAfterAttempts = settings.hard_reset_after_attempts !== undefined ? settings.hard_reset_after_attempts : 6;
         this._hardResetCooldownMs = settings.hard_reset_cooldown_ms !== undefined ? settings.hard_reset_cooldown_ms : 45000;
 
-        // Thời gian chờ TỐI THIỂU trước khi login lại sau khi mất kết nối / bị kick (2 phút,
-        // không login vô liền). Áp dụng cho cả backoff thường, "already playing" và hardReset.
-        this.RECONNECT_DELAY_MS = settings.reconnect_delay_ms !== undefined ? settings.reconnect_delay_ms : 2 * 60 * 1000;
+        // Thời gian chờ TỐI THIỂU trước khi login lại sau khi mất kết nối / bị kick (3s,
+        // để server.js tự restart node.exe phiên mới ngay, không chờ 120s).
+        this.RECONNECT_DELAY_MS = settings.reconnect_delay_ms !== undefined ? settings.reconnect_delay_ms : 3000;
 
         // Giám sát hotbar liên tục: thấy compass => gửi /dn + mở GUI + click axe tới khi vào được server
         this.hotbarTimer = null;
@@ -263,8 +264,8 @@ class BotInstance {
     }
 
     showManualRestartHint(reason) {
-        if (!this.running || this.joined_server) return;
-        this.log(`⚠️ ${reason} Kẹt tiến trình/compass → Kill node.exe để khởi động lại sạch sẽ...`, "#ff4d6d");
+        if (!this.running) return;
+        this.log(`⚠️ ${reason} → Tự kill session node.exe để vào lại ngay...`, "#ff4d6d");
         this.stopKillWatchdog();
         try {
             if (this.bot) {
@@ -404,6 +405,7 @@ class BotInstance {
 
     sendDn(reason = '', minGapMs = 5000) {
         if (!this.bot || !this.running) return false;
+        if (this.is_authenticated) return false;
         const now = Date.now();
         if (now - this._last_dn_at < minGapMs) return false;
         this._last_dn_at = now;
@@ -464,7 +466,14 @@ class BotInstance {
 
     hotbarTick(reason = 'hotbar') {
         if (!this.running || !this.bot || !this.bot.inventory || !this._spawn_logged) return;
-        if (this.findCompassSlot() === -1) return;
+        if (this.findCompassSlot() === -1) {
+            if (!this.joined_server) {
+                this.log("🎉 THÀNH CÔNG! Đã vào server! (hotbar không còn compass)", '#2ecc71');
+                this.sendJoined();
+                this.markJoinedServer();
+            }
+            return;
+        }
 
         if (this.joined_server) {
             // Đang ở trong server mà hotbar lại có compass => bị đưa về lobby / chưa đăng nhập
@@ -683,6 +692,7 @@ class BotInstance {
         this._spawn_logged = false;
         this._verify_join_running = false;
         this._dn_sent = false;
+        this.is_authenticated = false;
         this._compass_opened = false;
         this.joined_server = false;
         this.alreadyPlayingKickCount = 0;
@@ -773,6 +783,7 @@ class BotInstance {
         this._spawn_logged = false;
         this._verify_join_running = false;
         this._dn_sent = false;
+        this.is_authenticated = false;
         this._compass_opened = false;
         this.joined_server = false;
 
@@ -1022,6 +1033,7 @@ class BotInstance {
             const expectConfirm = (sentNow - prevSentAt) >= this._invulnWindowMs;
             this._lastAttackSentAt.set(attackTargetId, sentNow);
 
+            this.equipBestWeapon();
             this.bot.attack(attackTarget);
             this._lastAttackTargetId = attackTargetId;
             this._pendingAttacks.set(attackTargetId, { sentAt: sentNow, expectConfirm });
@@ -1029,8 +1041,11 @@ class BotInstance {
             this.next_attack_delay = this.farm_min_delay + Math.random() * (this.farm_max_delay - this.farm_min_delay);
             this._missCount = 0;
 
+            const targetName = attackTarget.displayName || attackTarget.name || 'quái';
+            this.log(`⚔️ [Farm] Chém: ${targetName} (khoảng cách: ${finalDist.toFixed(1)}m, delay: ${this.next_attack_delay.toFixed(2)}s)`, '#58a6ff');
+
             if (this.farm_debug) {
-                this.log(`⚔️ [debug] Chém: ${attackTarget.name || '?'} (id=${attackTargetId}) dist=${finalDist.toFixed(2)} ping=${(finalLatency * 1000).toFixed(0)}ms adaptiveMargin=${this._adaptiveReachMargin.toFixed(2)}${expectConfirm ? '' : ' (invuln, không kỳ vọng confirm)'}${retargeted ? ` (đổi mục tiêu qua raycast, ban đầu chọn id=${stillTarget.id})` : ''}`, '#58a6ff');
+                this.log(`⚔️ [debug] Chi tiết: ${attackTarget.name || '?'} (id=${attackTargetId}) dist=${finalDist.toFixed(2)} ping=${(finalLatency * 1000).toFixed(0)}ms margin=${this._adaptiveReachMargin.toFixed(2)}${expectConfirm ? '' : ' (invuln)'}`, '#8b949e');
             }
         } catch (e) {
             if (this.farm_debug) {
@@ -1180,9 +1195,11 @@ class BotInstance {
 
         for (const [id, entity] of Object.entries(entities)) {
             try {
-                if (!entity) continue;
-                if (entity.type !== 'mob') continue;
-                if (entity.health && entity.health <= 0) continue;
+                if (!entity || entity === this.bot.entity) continue;
+                const isCreature = entity.type === 'mob' || entity.type === 'animal' || entity.type === 'hostile' || entity.type === 'passive' ||
+                    (entity.name && entity.type !== 'player' && entity.type !== 'object' && entity.type !== 'global');
+                if (!isCreature) continue;
+                if (entity.health !== undefined && entity.health <= 0) continue;
 
                 const pos = entity.position;
                 if (!pos) continue;
@@ -1253,7 +1270,10 @@ class BotInstance {
             let bestT = Infinity;
 
             for (const [id, entity] of Object.entries(this.bot.entities)) {
-                if (!entity || entity.type !== 'mob') continue;
+                if (!entity || entity === this.bot.entity) continue;
+                const isCreature = entity.type === 'mob' || entity.type === 'animal' || entity.type === 'hostile' || entity.type === 'passive' ||
+                    (entity.name && entity.type !== 'player' && entity.type !== 'object' && entity.type !== 'global');
+                if (!isCreature) continue;
                 if (entity.health !== undefined && entity.health <= 0) continue;
                 if (!entity.position) continue;
 
@@ -2321,10 +2341,10 @@ class BotInstance {
                 return;
             }
 
-            // ⭐ Gửi /dn ngay từ lần đầu (sau khi đã đợi đủ firstDelay) chứ không chờ tới
-            // lần retry thứ 2 mới gửi - phòng trường hợp chưa đăng nhập nên GUI không mở
-            // được. sendDn() tự có minGap chống spam nên gọi lại nhiều lần vẫn an toàn.
-            this.sendDn(attempt === 1 ? 'chuẩn bị mở GUI compass' : `retry lần ${attempt}`);
+            // ⭐ Chỉ gửi /dn nếu chưa đăng nhập và chưa gửi /dn trước đó
+            if (!this.is_authenticated && !this._dn_sent) {
+                this.sendDn(attempt === 1 ? 'chuẩn bị mở GUI compass' : `retry lần ${attempt}`);
+            }
 
             const clickStep = () => {
                 if (isStale() || !this.bot || !this.running) return;
@@ -2514,7 +2534,18 @@ class BotInstance {
         this._initial_join_pending = false;
         this.gui_opened = true;
         this.alreadyPlayingKickCount = 0;
+        this.stopKillWatchdog();
         this.log("✅ Đã vào server!", '#2ecc71');
+
+        // Tự động cầm vũ khí và đồng bộ trạng thái item lên giao diện web
+        setTimeout(() => {
+            this.equipBestWeapon();
+            this.sendHeldItem();
+        }, 300);
+        setTimeout(() => {
+            this.equipBestWeapon();
+            this.sendHeldItem();
+        }, 1200);
 
         if (this.afk_persist && !this.anti_afk_running) {
             setTimeout(() => this.startAntiAfk(), 1000);
@@ -2692,7 +2723,8 @@ class BotInstance {
                     this.sendStatus();
                     this.checkHeldItem();
                     try {
-                        this.bot.on('heldItemChanged', (ent) => {
+                        this.bot.on('setQuickBarSlot', () => this.sendHeldItem());
+                        this.bot.on('entityEquip', (ent) => {
                             if (!this.bot) return;
                             if (!ent || ent === this.bot.entity) this.sendHeldItem();
                         });
@@ -2704,6 +2736,7 @@ class BotInstance {
                             this._inventory_listener_attached = true;
                             this.bot.inventory.on('updateSlot', (slot) => {
                                 if (this.joined_server) {
+                                    if (slot >= 36 && slot <= 44) this.sendHeldItem();
                                     this.onInventorySlotChanged(slot);
                                     return;
                                 }
@@ -2760,19 +2793,8 @@ class BotInstance {
                 this.joined_server = false;
 
                 if (this.running) {
-                    const isAlreadyPlaying = /đang chơi|already.*(playing|online|logged)/i.test(reasonStr);
-
-                    if (isAlreadyPlaying) {
-                        this.alreadyPlayingKickCount++;
-                        this.log(`⚠️ Bị kick vì kẹt session ("${reasonStr}") → Tự kill node.exe để khởi động lại...`, '#ff4d6d');
-                        this.showManualRestartHint('Kẹt session trên server');
-                        return;
-                    } else {
-                        this.alreadyPlayingKickCount = 0;
-                        // ⭐ Dùng reconnect() với backoff/hard-reset thay vì setTimeout cố định 1s,
-                        // để chuỗi kick liên tiếp (không phải "đang chơi") cũng được bảo vệ khỏi loop vô hạn.
-                        this.reconnect();
-                    }
+                    this.showManualRestartHint(`Bị kick: ${reasonStr.substring(0, 60)}`);
+                    return;
                 }
             });
 
@@ -2785,11 +2807,8 @@ class BotInstance {
                 this._spawn_logged = false;
                 this.joined_server = false;
                 if (this.running) {
-                    // ⭐ FIX RECONNECT-LOOP-VÔ-HẠN: trước đây chờ đúng 1 khoảng cố định (10s)
-                    // rồi login lại ngay, bất kể đã thất bại bao nhiêu lần liên tiếp. Giờ dùng
-                    // reconnect() có backoff tăng dần + tự hardReset() nếu thất bại quá nhiều
-                    // lần liên tiếp, tự động làm đúng việc "Dừng rồi Chạy lại" thủ công.
-                    this.reconnect();
+                    this.showManualRestartHint(`Mất kết nối sau ${elapsed.toFixed(1)}s`);
+                    return;
                 }
             });
 
@@ -2801,20 +2820,24 @@ class BotInstance {
                 this.log(`❌ Lỗi: ${errStr.substring(0, 100)}`, '#ff4d6d');
 
                 if (this.running) {
-                    // ⭐ Tương tự 'end': dùng reconnect() có backoff + tự hardReset() thay vì
-                    // setTimeout cố định 10s, để tránh loop vô hạn khi lỗi lặp lại liên tục.
-                    this.reconnect();
+                    this.showManualRestartHint(`Lỗi kết nối: ${errStr.substring(0, 60)}`);
+                    return;
                 }
             });
 
             this.bot.on('message', (msg) => {
                 this.touchActivity();
 
-                // Server nhắc đăng nhập -> gửi lại /dn khi chưa vào server hoặc hotbar còn compass
                 try {
                     const plain = msg.toString();
+                    if (/đã đăng nhập thành công|bạn đã đăng nhập rồi|đăng nhập thành công|logged in/i.test(plain)) {
+                        this.is_authenticated = true;
+                    }
+
+                    // Server nhắc đăng nhập -> gửi lại /dn khi chưa vào server hoặc hotbar còn compass
                     if (/\/dn\b|\/login\b|đăng nhập|dang nhap/i.test(plain) &&
-                        (!this.joined_server || this.findCompassSlot() !== -1)) {
+                        (!this.joined_server || this.findCompassSlot() !== -1) &&
+                        !this.is_authenticated) {
                         this.sendDn('server yêu cầu đăng nhập', 15000);
                     }
                 } catch (e) {}
@@ -2874,10 +2897,53 @@ class BotInstance {
         }
     }
 
+    findBestWeaponSlot() {
+        if (!this.bot || !this.bot.inventory) return -1;
+        const WEAPON_PRIORITY = [
+            'netherite_sword', 'diamond_sword', 'iron_sword', 'golden_sword', 'stone_sword', 'wooden_sword',
+            'netherite_axe', 'diamond_axe', 'iron_axe', 'golden_axe', 'stone_axe', 'wooden_axe'
+        ];
+        // 1. Quét 9 ô hotbar (slot 36 -> 44) theo thứ tự ưu tiên
+        for (const weaponName of WEAPON_PRIORITY) {
+            for (let hotbarIdx = 0; hotbarIdx < 9; hotbarIdx++) {
+                const item = this.bot.inventory.slots[36 + hotbarIdx];
+                if (item && item.name && (item.name === weaponName || item.name.includes(weaponName))) {
+                    return hotbarIdx;
+                }
+            }
+        }
+        // 2. Nếu không khớp tên chuẩn, tìm bất kỳ kiếm hoặc rìu nào trong hotbar
+        for (let hotbarIdx = 0; hotbarIdx < 9; hotbarIdx++) {
+            const item = this.bot.inventory.slots[36 + hotbarIdx];
+            if (item && item.name && (item.name.includes('sword') || item.name.includes('axe'))) {
+                return hotbarIdx;
+            }
+        }
+        return -1;
+    }
+
+    equipBestWeapon() {
+        if (!this.bot || !this.bot.inventory) return false;
+        try {
+            const weaponHotbarIdx = this.findBestWeaponSlot();
+            if (weaponHotbarIdx !== -1) {
+                if (this.bot.quickBarSlot !== weaponHotbarIdx) {
+                    this.bot.setQuickBarSlot(weaponHotbarIdx);
+                    this.sendHeldItem();
+                }
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
     sendHeldItem() {
         if (!this.bot || !this.running) return;
         try {
-            const held = this.bot.heldItem;
+            let held = this.bot.heldItem;
+            if (!held && this.bot.inventory && typeof this.bot.quickBarSlot === 'number') {
+                held = this.bot.inventory.slots[36 + this.bot.quickBarSlot];
+            }
             let itemName = "Tay không (Trống)";
             if (held) {
                 const count = held.count && held.count > 1 ? (" x" + held.count) : "";

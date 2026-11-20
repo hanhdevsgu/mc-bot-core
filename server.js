@@ -184,8 +184,8 @@ const DEFAULT_BOT_SETTINGS = {
 
     farm_smart_aim: false,
     farm_lookat: true,
-    afk_persist: true,
-    farm_persist: false,
+    afk_persist: false,
+    farm_persist: true,
 
     storage_persist: false,
 
@@ -339,6 +339,7 @@ function startBot(username, password, opts = {}) {
                         if (bots[username]) bots[username].current_ip = parsed.ip;
                         sendToPython('ip', username, parsed.ip);
                     } else if (parsed.type === 'item') {
+                        if (bots[username]) bots[username].item = parsed.item;
                         sendToPython('item', username, parsed.item);
                     } else if (parsed.type === 'status') {
                         if (bots[username]) {
@@ -400,6 +401,7 @@ function startBot(username, password, opts = {}) {
         if (bots[username]) {
             const botInfo = bots[username];
             botInfo.running = false;
+            botInfo.item = 'Tay không (Trống)';
             saveRunningState();
 
             sendToPython('status', username, {
