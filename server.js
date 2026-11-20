@@ -532,11 +532,40 @@ function sendBotCommand(username, command, data) {
     }
 }
 
+const wsClients = new Set();
+
 function sendToPython(type, ...args) {
-    if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-        try {
-            currentWs.send(JSON.stringify({ type, args }));
-        } catch (e) {}
+    const payload = JSON.stringify({ type, args });
+    for (const ws of wsClients) {
+        if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(payload); } catch (e) {}
+        }
+    }
+}
+
+function listSavedSessions() {
+    try {
+        if (!fs.existsSync(SESSION_DIR)) return [];
+        const files = fs.readdirSync(SESSION_DIR);
+        const accounts = [];
+        for (const f of files) {
+            if (f.endsWith('.json') && !f.startsWith('_') && f !== 'accounts.json') {
+                const username = f.replace('.json', '');
+                try {
+                    const data = JSON.parse(fs.readFileSync(path.join(SESSION_DIR, f), 'utf-8'));
+                    accounts.push({
+                        username,
+                        settings: data.settings || {},
+                        savedPassword: data.password || ''
+                    });
+                } catch (e) {
+                    accounts.push({ username, settings: {}, savedPassword: '' });
+                }
+            }
+        }
+        return accounts;
+    } catch (e) {
+        return [];
     }
 }
 
@@ -567,6 +596,17 @@ const WS_RETRY_DELAY_MS = 2000;
 
 function startWsServer() {
     const httpServer = http.createServer((req, res) => {
+        if (req.url === '/health' || req.url === '/ping') {
+            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+            return res.end('OK');
+        }
+
+        const indexPath = path.join(__dirname, 'public', 'index.html');
+        if (fs.existsSync(indexPath)) {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            return fs.createReadStream(indexPath).pipe(res);
+        }
+
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Bot Core Server is running 24/7');
     });
@@ -599,10 +639,14 @@ function startWsServer() {
     httpServer.listen(WS_PORT);
 
     server.on('connection', (ws) => {
-        console.log('🔌 Python client connected');
+        wsClients.add(ws);
         currentWs = ws;
+        console.log(`🔌 Client connected (total: ${wsClients.size})`);
 
-        sendToPython('all_status', getAllStatuses());
+        try {
+            ws.send(JSON.stringify({ type: 'all_status', args: [getAllStatuses()] }));
+            ws.send(JSON.stringify({ type: 'saved_accounts', args: [listSavedSessions()] }));
+        } catch (e) {}
 
         ws.on('message', (message) => {
             try {
@@ -889,9 +933,40 @@ function startWsServer() {
                         sendToPython('all_status', getAllStatuses());
                         break;
 
-                    default:
+                    case 'get_saved_accounts':
+                        sendToPython('saved_accounts', listSavedSessions());
+                        break;
 
-                        console.warn(`⚠️ Nhận action không xác định từ Python: "${action}"`);
+                    case 'create_session':
+                        if (username) {
+                            let s = loadSession(username);
+                            if (!s) {
+                                s = createSession(username);
+                            }
+                            if (password) s.password = password;
+                            if (box_settings || settings) {
+                                s.settings = Object.assign(s.settings || {}, box_settings || settings);
+                            }
+                            saveSession(username, s);
+                            sendToPython('saved_accounts', listSavedSessions());
+                        }
+                        break;
+
+                    case 'delete_session':
+                        if (username) {
+                            if (bots[username] && bots[username].running) {
+                                stopBot(username);
+                            }
+                            const file = path.join(SESSION_DIR, `${username}.json`);
+                            try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (e) {}
+                            delete bots[username];
+                            sendToPython('saved_accounts', listSavedSessions());
+                            sendToPython('all_status', getAllStatuses());
+                        }
+                        break;
+
+                    default:
+                        console.warn(`⚠️ Nhận action không xác định: "${action}"`);
                 }
             } catch (e) {
                 console.error('❌ Error processing message:', e);
@@ -899,10 +974,15 @@ function startWsServer() {
         });
 
         ws.on('close', () => {
-            console.log('🔌 Python client disconnected');
+            wsClients.delete(ws);
             if (currentWs === ws) {
-                currentWs = null;
+                currentWs = wsClients.values().next().value || null;
             }
+            console.log(`🔌 Client disconnected (remaining: ${wsClients.size})`);
+        });
+
+        ws.on('error', () => {
+            wsClients.delete(ws);
         });
     });
 
