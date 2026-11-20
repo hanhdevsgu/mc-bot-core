@@ -3,570 +3,701 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MC Bot Control</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22><text y=%2226%22 font-size=%2226%22>🎮</text></svg>">
+  <title>MC BOT CONTROL</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236366f1%22 stroke-width=%222%22><polygon points=%2212 2 2 7 12 12 22 7 12 2%22/><polyline points=%222 17 12 22 22 17%22/><polyline points=%222 12 12 17 22 12%22/></svg>">
   <style>
+    /* ═══════ DESIGN SYSTEM — MC BOT CONTROL ═══════
+       Industry: Gaming / Automation Tool Dashboard
+       Mood: Cyberpunk Obsidian, Tactile, High-Tech, Razor-Sharp
+       ═══════════════════════════════════════════════ */
     :root {
-      --bg-dark: #0a0e1a;
-      --card-bg: #151b2e;
-      --panel-bg: #111827;
-      --input-bg: #0d1120;
-      --border: #26304a;
-      --border-light: #2d3555;
-      --accent: #7c5cff;
-      --accent-hover: #9074ff;
-      --cyan: #38bdf8;
-      --green: #22c55e;
-      --red: #ef4444;
-      --amber: #fbbf24;
-      --text: #e5e7eb;
-      --text-muted: #94a3b8;
+      --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono:    "JetBrains Mono", Consolas, "SF Mono", Menlo, monospace;
+
+      --bg-base:      #080c14;
+      --bg-surface:   #0e1422;
+      --bg-card:      #131a2e;
+      --bg-elevated:  #18223c;
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-medium: #1f2b48;
+      --border-focus:  #6366f1;
+
+      --primary:      #6366f1;
+      --primary-hover:#4f46e5;
+      --emerald:      #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.25);
+      --rose:         #f43f5e;
+      --rose-hover:   #e11d48;
+      --cyan:         #06b6d4;
+      --amber:        #f59e0b;
+
+      --text-main:    #f8fafc;
+      --text-sub:     #94a3b8;
+      --text-dim:     #64748b;
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
     }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: var(--bg-dark);
-      color: var(--text);
-      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-body);
       height: 100vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       user-select: none;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* TOP TITLE BAR */
-    .title-bar {
-      background: #111827;
-      border-bottom: 2px solid var(--accent);
-      height: 38px;
+    /* ── SVGs ── */
+    .icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2;
+      fill: none;
+      stroke: currentColor;
+      display: inline-block;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .icon-sm { width: 12px; height: 12px; }
+    .icon-lg { width: 16px; height: 16px; }
+
+    /* ── HEADER ── */
+    .app-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-medium);
+      height: 40px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 12px;
+      padding: 0 14px;
       flex-shrink: 0;
     }
-    .title-left {
+    .brand-wrap {
       display: flex;
       align-items: center;
-      gap: 16px;
-    }
-    .brand-title {
-      font-size: 14px;
+      gap: 8px;
+      font-size: 13px;
       font-weight: 800;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.06em;
       color: #fff;
+    }
+    .brand-badge {
+      width: 22px;
+      height: 22px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+    }
+    .brand-badge svg { width: 13px; height: 13px; stroke: #fff; }
+    .header-filters {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-left: 20px;
+    }
+    .chk-label {
       display: flex;
       align-items: center;
       gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sub);
+      cursor: pointer;
     }
-    .brand-title span.purple { color: var(--accent); }
-    .filter-check {
+    .chk-label input {
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .network-pill {
       display: flex;
       align-items: center;
       gap: 6px;
       font-size: 12px;
-      color: var(--text);
-      cursor: pointer;
-    }
-    .filter-check input {
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
-    .title-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 13px;
-    }
-    .header-ip {
-      color: var(--cyan);
       font-weight: 700;
-      display: flex;
-      align-items: center;
-      gap: 5px;
+      color: var(--cyan);
+      background: rgba(6, 182, 212, 0.08);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      padding: 3px 9px;
+      border-radius: 999px;
     }
-    .conn-dot {
-      width: 8px;
-      height: 8px;
+    .pulse-indicator {
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background: var(--red);
+      background: var(--rose);
+      transition: all 0.3s;
     }
-    .conn-dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .pulse-indicator.live {
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
 
-    /* MAIN CONTAINER */
-    .app-main {
+    /* ── MAIN WORKSPACE ── */
+    .app-workspace {
       flex: 1;
       display: flex;
-      padding: 6px;
-      gap: 6px;
+      padding: 8px;
+      gap: 8px;
       overflow: hidden;
     }
 
-    /* LEFT PANE: CHAT & LOGS */
-    .left-pane {
+    /* ── LEFT PANE: LOG CONSOLE ── */
+    .console-pane {
       flex: 1;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
       display: flex;
       flex-direction: column;
       overflow: hidden;
       min-width: 0;
     }
-    .chat-ip-banner {
-      background: #111827;
+    .console-topbar {
+      background: #0b101c;
+      border-bottom: 1px solid var(--border-medium);
       padding: 8px 12px;
-      text-align: center;
-      font-size: 15px;
-      font-weight: 800;
-      color: var(--green);
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .chat-sub-bar {
-      background: #111827;
-      padding: 4px 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid var(--border);
     }
-    .chat-sub-title {
-      font-size: 12px;
+    .console-ip-glow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
       font-weight: 800;
-      color: #fff;
-      letter-spacing: 0.5px;
+      color: var(--emerald);
+      letter-spacing: 0.04em;
     }
-    .btn-clear {
-      background: #1f2940;
-      color: #cbd5e1;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 3px 10px;
+    .btn-action-ghost {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-sub);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 3px 8px;
       font-size: 11px;
+      font-weight: 600;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
     }
-    .btn-clear:hover { background: #2d3b5c; }
-    .chat-body {
+    .btn-action-ghost:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      border-color: var(--border-medium);
+    }
+    .console-stream {
       flex: 1;
-      background: #0d1120;
-      padding: 10px;
+      background: #060911;
+      padding: 10px 12px;
       overflow-y: auto;
-      font-family: Consolas, "Lucida Console", "Courier New", monospace;
+      font-family: var(--font-mono);
       font-size: 12px;
-      line-height: 1.5;
+      line-height: 1.55;
       display: flex;
       flex-direction: column;
       gap: 2px;
       user-select: text;
     }
-    .chat-footer-wrap {
-      background: #0d1120;
-      border-top: 1px solid var(--border);
+    .console-stream::-webkit-scrollbar { width: 5px; }
+    .console-stream::-webkit-scrollbar-track { background: transparent; }
+    .console-stream::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    .console-input-bar {
+      background: #090e1a;
+      border-top: 1px solid var(--border-medium);
       padding: 8px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .chat-footer-label {
-      font-size: 11px;
-      color: #64748b;
-      font-weight: 600;
-    }
-    .chat-input-row {
       display: flex;
       gap: 6px;
     }
-    .chat-input {
+    .console-input {
       flex: 1;
-      background: #151b2e;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
       color: #fff;
-      padding: 6px 10px;
-      font-size: 13px;
+      padding: 7px 10px;
+      font-size: 12px;
       outline: none;
+      font-family: var(--font-mono);
       user-select: text;
     }
-    .chat-input:focus { border-color: var(--accent); }
-    .btn-chat-send {
-      background: var(--accent);
+    .console-input:focus { border-color: var(--primary); }
+    .btn-submit {
+      background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
       color: #fff;
       border: none;
-      border-radius: 3px;
-      padding: 6px 16px;
+      border-radius: var(--radius-sm);
+      padding: 7px 14px;
       font-weight: 700;
       font-size: 12px;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
+      transition: opacity 0.15s;
     }
-    .btn-chat-send:hover { background: var(--accent-hover); }
+    .btn-submit:hover { opacity: 0.9; }
 
-    /* RIGHT PANE: CONTROLS & BOT LIST */
-    .right-pane {
-      width: 326px;
+    /* ── RIGHT PANE: CONTROLS & BOT ROSTER ── */
+    .controls-pane {
+      width: 330px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
       overflow-y: auto;
       flex-shrink: 0;
     }
-
-    /* CARD STYLING */
-    .ctrl-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
+    .widget-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
       padding: 10px;
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
-    .ctrl-card-title {
-      font-size: 12px;
+    .widget-header {
+      font-size: 11px;
       font-weight: 800;
-      color: #fff;
-      letter-spacing: 0.5px;
+      color: var(--text-sub);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 6px;
     }
 
-    /* WASD BUTTONS */
-    .wasd-container {
+    /* ── HARDWARE KEYCAPS (WASD) ── */
+    .dpad-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-      width: 140px;
+      gap: 5px;
+      width: 146px;
       margin: 0 auto;
     }
-    .btn-wasd {
-      background: #1f2940;
-      color: #fff;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
-      padding: 8px;
+    .keycap-btn {
+      background: linear-gradient(180deg, #1b253b 0%, #111827 100%);
+      border: 1px solid #2d3b55;
+      border-bottom: 3px solid #0f1624;
+      border-radius: var(--radius-sm);
+      color: #f1f5f9;
+      padding: 8px 0;
       font-weight: 800;
       font-size: 13px;
       cursor: pointer;
       text-align: center;
-      transition: all 0.1s;
+      transition: all 0.08s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .btn-wasd:hover { background: #2f3e61; }
-    .btn-wasd:active { background: var(--accent); color: #fff; }
-    .btn-jump-action {
-      background: var(--accent);
+    .keycap-btn:hover {
+      background: linear-gradient(180deg, #263350 0%, #172033 100%);
+      border-color: #3b4d6e;
+    }
+    .keycap-btn:active {
+      transform: translateY(2px);
+      border-bottom-width: 1px;
+    }
+    .jump-btn-bar {
+      background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
       color: #fff;
       border: none;
-      border-radius: 3px;
-      padding: 6px;
+      border-radius: var(--radius-sm);
+      padding: 7px;
       font-weight: 800;
       font-size: 12px;
+      letter-spacing: 0.05em;
       cursor: pointer;
-      width: 140px;
+      width: 146px;
       margin: 0 auto;
-      text-align: center;
-      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
     }
-    .btn-jump-action:hover { background: var(--accent-hover); }
+    .jump-btn-bar:hover { opacity: 0.92; }
+    .jump-btn-bar:active { transform: translateY(1px); }
 
-    /* 3 TOGGLE BUTTONS */
-    .toggle-row {
+    /* ── TACTILE TOGGLE TILES ── */
+    .toggles-strip {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
+      gap: 5px;
     }
-    .btn-main-toggle {
-      background: #1f2940;
-      color: #cbd5e1;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
-      padding: 6px 2px;
-      font-size: 11px;
-      font-weight: 800;
+    .tactile-tile {
+      background: var(--bg-card);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      padding: 8px 4px;
       cursor: pointer;
-      text-align: center;
-      line-height: 1.3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .tactile-tile:hover {
+      border-color: #334366;
+      background: #17213a;
+    }
+    .tactile-tile.active {
+      border-color: var(--emerald);
+      background: rgba(16, 185, 129, 0.08);
+      box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.12);
+    }
+    .tile-led {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #475569;
       transition: all 0.2s;
     }
-    .btn-main-toggle.active {
-      background: var(--green);
-      color: #000;
-      border-color: var(--green);
+    .tactile-tile.active .tile-led {
+      background: var(--emerald);
+      box-shadow: 0 0 6px var(--emerald);
     }
+    .tile-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--text-sub);
+    }
+    .tactile-tile.active .tile-label { color: #fff; }
+    .tile-val {
+      font-size: 10px;
+      font-weight: 800;
+      color: #64748b;
+    }
+    .tactile-tile.active .tile-val { color: var(--emerald); }
 
-    /* BOT SELECTOR ROW */
-    .bot-select-row {
+    /* ── BOT SELECTOR & METRICS ── */
+    .selector-block {
       display: flex;
       align-items: center;
       gap: 6px;
-      background: #111827;
-      padding: 6px 8px;
-      border-radius: 3px;
-      border: 1px solid var(--border);
+      background: #090e1a;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
     }
-    .select-dropdown {
+    .cyber-select {
       flex: 1;
-      background: #151b2e;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
+      background: transparent;
+      border: none;
       color: #fff;
-      padding: 4px 6px;
       font-size: 12px;
       font-weight: 700;
       outline: none;
       cursor: pointer;
     }
-    .item-in-hand {
-      font-size: 12px;
+    .cyber-select option { background: var(--bg-surface); color: #fff; }
+    .item-radar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-size: 11px;
       font-weight: 700;
       color: var(--amber);
-      text-align: center;
       padding: 2px 0;
     }
 
-    /* BOT LIST HEADER & SEARCH */
-    .search-row {
+    /* ── ROSTER CONTROLS ── */
+    .search-box-wrap {
       position: relative;
       display: flex;
       align-items: center;
     }
-    .search-input {
+    .search-field {
       width: 100%;
-      background: #111827;
-      border: 1px solid var(--border);
-      border-radius: 3px;
+      background: #090e1a;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
       color: #fff;
-      padding: 5px 24px 5px 24px;
-      font-size: 12px;
+      padding: 5px 24px 5px 26px;
+      font-size: 11px;
       outline: none;
     }
-    .search-icon {
+    .search-field:focus { border-color: var(--primary); }
+    .search-glyph {
       position: absolute;
-      left: 7px;
-      font-size: 11px;
-      color: #64748b;
+      left: 8px;
+      color: var(--text-dim);
+      pointer-events: none;
     }
-    .clear-search-btn {
+    .search-clear-x {
       position: absolute;
       right: 7px;
-      font-size: 11px;
-      color: #64748b;
-      cursor: pointer;
       background: none;
       border: none;
+      color: var(--text-dim);
+      cursor: pointer;
     }
-    .filter-row {
+    .tab-pills {
       display: flex;
-      gap: 3px;
+      gap: 4px;
     }
-    .filter-tab {
+    .tab-pill-btn {
       flex: 1;
-      background: #151b2e;
-      color: #94a3b8;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 4px;
-      font-size: 11px;
+      background: var(--bg-card);
+      color: var(--text-sub);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      padding: 4px 0;
+      font-size: 10px;
       font-weight: 800;
+      letter-spacing: 0.04em;
       cursor: pointer;
       text-align: center;
     }
-    .filter-tab.active {
-      background: var(--accent);
+    .tab-pill-btn.active {
+      background: var(--primary);
       color: #fff;
-      border-color: var(--accent);
+      border-color: var(--primary);
     }
 
-    /* BOT ITEMS */
-    .bot-items-scroll {
+    /* ── BOT CARDS ROSTER ── */
+    .roster-list {
       display: flex;
       flex-direction: column;
       gap: 6px;
       max-height: 250px;
       overflow-y: auto;
     }
-    .bot-card-item {
-      background: #111827;
-      border: 1px solid var(--border);
-      border-radius: 3px;
+    .roster-list::-webkit-scrollbar { width: 4px; }
+    .roster-list::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    .bot-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
       padding: 6px 8px;
       display: flex;
       flex-direction: column;
       gap: 5px;
       cursor: pointer;
+      transition: all 0.15s;
     }
-    .bot-card-item.selected {
-      border-color: var(--accent);
-      background: #131a30;
+    .bot-card.selected {
+      border-color: var(--primary);
+      background: #16203a;
+      box-shadow: 0 0 0 1px var(--primary);
     }
-    .bot-card-top {
+    .bot-card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .bot-id-wrap {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 12px;
-      font-weight: 800;
     }
-    .bot-play-icon { color: var(--green); font-size: 10px; }
-    .bot-card-ip {
-      color: var(--green);
-      font-size: 11px;
+    .bot-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #475569;
+    }
+    .bot-status-dot.active {
+      background: var(--emerald);
+      box-shadow: 0 0 6px var(--emerald);
+    }
+    .bot-name-text {
+      font-size: 12px;
       font-weight: 700;
+      color: #fff;
+    }
+    .bot-ip-tag {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--cyan);
       display: flex;
       align-items: center;
       gap: 3px;
     }
-    .bot-card-controls {
+    .bot-card-actions {
       display: flex;
       gap: 4px;
       align-items: center;
     }
-    .pwd-input {
+    .auth-input {
       flex: 1;
-      background: #0d1120;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
+      background: #090e1a;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
       color: #fff;
       padding: 3px 6px;
       font-size: 11px;
       outline: none;
       min-width: 0;
     }
-    .btn-cfg {
-      background: #00b4d8;
-      color: #000;
+    .btn-icon-cmd {
+      background: #1e293b;
+      color: var(--text-sub);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 4px 7px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .btn-icon-cmd:hover { background: #334155; color: #fff; }
+    .btn-toggle-engine {
       border: none;
-      border-radius: 3px;
-      padding: 3px 7px;
-      font-size: 12px;
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 10px;
       font-weight: 800;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
-    .btn-run-action {
-      background: #ef4444;
-      color: #fff;
-      border: none;
-      border-radius: 3px;
-      padding: 3px 8px;
-      font-size: 11px;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .btn-run-action.start {
-      background: #22c55e;
+    .btn-toggle-engine.start {
+      background: var(--emerald);
       color: #000;
     }
-    .btn-del-action {
-      background: #ef4444;
+    .btn-toggle-engine.stop {
+      background: var(--rose);
       color: #fff;
-      border: none;
-      border-radius: 3px;
-      padding: 3px 6px;
-      font-size: 11px;
+    }
+    .btn-trash-bot {
+      background: rgba(244, 63, 94, 0.1);
+      color: var(--rose);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      border-radius: var(--radius-sm);
+      padding: 4px 6px;
       cursor: pointer;
     }
+    .btn-trash-bot:hover { background: var(--rose); color: #fff; }
 
-    /* ADD BOT ROW */
-    .add-bot-section {
+    /* ── ENROLL BOT ── */
+    .enroll-box {
+      background: #090e1a;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      padding: 6px 8px;
       display: flex;
       flex-direction: column;
       gap: 4px;
-      background: #111827;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 6px 8px;
     }
-    .add-label {
-      font-size: 11px;
+    .enroll-label {
+      font-size: 10px;
       font-weight: 700;
-      color: #94a3b8;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
-    .add-input-row {
+    .enroll-row {
       display: flex;
       gap: 4px;
     }
-    .add-input {
+    .enroll-input {
       flex: 1;
-      background: #151b2e;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
       color: #fff;
-      padding: 4px 6px;
-      font-size: 12px;
+      padding: 4px 8px;
+      font-size: 11px;
       outline: none;
     }
-    .btn-add-action {
-      background: var(--accent);
+    .btn-enroll-action {
+      background: var(--primary);
       color: #fff;
       border: none;
-      border-radius: 3px;
+      border-radius: var(--radius-sm);
       padding: 4px 10px;
       font-size: 11px;
       font-weight: 800;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
-    /* FULL MODAL SETTINGS (100% Y CHANG ẢNH 2, 3, 4) */
-    .modal-overlay {
+    /* ── SETTINGS MODAL (FULL CAPABILITY, ZERO AI CLICHE) ── */
+    .modal-veil {
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.75);
+      background: rgba(4, 7, 13, 0.85);
+      backdrop-filter: blur(4px);
       z-index: 9999;
       align-items: center;
       justify-content: center;
-      padding: 10px;
+      padding: 12px;
     }
-    .modal-overlay.active { display: flex; }
-    .modal-window {
-      background: #0d1120;
-      border: 1px solid #38bdf8;
-      border-radius: 4px;
+    .modal-veil.active { display: flex; }
+    .modal-dialog {
+      background: #0d1322;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-lg);
       width: 480px;
       max-width: 95vw;
       height: 90vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.8);
     }
-    .modal-header {
+    .dialog-header {
       background: #111827;
-      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-medium);
+      padding: 10px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid var(--border);
     }
-    .modal-title-left {
+    .dialog-title-group {
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .modal-title-name {
-      font-size: 14px;
+    .dialog-title-main {
+      font-size: 13px;
       font-weight: 800;
-      color: var(--accent);
+      color: var(--primary);
+      letter-spacing: 0.04em;
     }
-    .modal-title-sub {
+    .dialog-title-sub {
       font-size: 11px;
-      color: #64748b;
+      color: var(--text-dim);
     }
-    .modal-close-x {
+    .btn-dialog-close {
       background: none;
       border: none;
-      color: #94a3b8;
-      font-size: 16px;
+      color: var(--text-dim);
+      font-size: 14px;
       cursor: pointer;
-      font-weight: 800;
     }
-    .modal-body {
+    .btn-dialog-close:hover { color: #fff; }
+    .dialog-scroll-body {
       flex: 1;
       padding: 12px;
       overflow-y: auto;
@@ -574,286 +705,304 @@
       flex-direction: column;
       gap: 12px;
     }
-    .modal-section {
-      background: #151b2e;
-      border: 1px solid var(--border);
-      border-radius: 4px;
+    .dialog-scroll-body::-webkit-scrollbar { width: 5px; }
+    .dialog-scroll-body::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    .spec-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
       padding: 10px;
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
-    .sec-title {
-      font-size: 12px;
+    .spec-head {
+      font-size: 11px;
       font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
       display: flex;
       align-items: center;
       gap: 6px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 5px;
     }
-    .sec-title.combat { color: var(--accent); }
-    .sec-title.auto { color: #38bdf8; }
-    .sec-title.item { color: #818cf8; }
-    .sec-title.chest { color: #a78bfa; }
-    .sec-title.move { color: #34d399; }
-    .sec-title.debug { color: #38bdf8; }
-    .sec-title.proxy { color: #38bdf8; }
+    .spec-head.combat { color: #818cf8; }
+    .spec-head.auto   { color: var(--emerald); }
+    .spec-head.item   { color: var(--amber); }
+    .spec-head.chest  { color: #a78bfa; }
+    .spec-head.move   { color: #34d399; }
+    .spec-head.debug  { color: var(--cyan); }
+    .spec-head.proxy  { color: var(--cyan); }
 
-    .form-row {
+    .prop-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
       font-size: 12px;
     }
-    .form-row label {
-      color: #94a3b8;
+    .prop-row label {
+      color: var(--text-sub);
       font-size: 12px;
       flex: 1;
     }
-    .form-input {
-      background: #1a2137;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
-      color: #e5e7eb;
-      padding: 4px 8px;
+    .prop-input {
+      background: #0b101c;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      color: #fff;
+      padding: 5px 8px;
       font-size: 12px;
       outline: none;
     }
-    .form-input:focus { border-color: var(--accent); }
-    .form-select {
-      background: #1a2137;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
-      color: #e5e7eb;
-      padding: 4px 8px;
+    .prop-input:focus { border-color: var(--primary); }
+    .prop-select {
+      background: #0b101c;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      color: #fff;
+      padding: 5px 8px;
       font-size: 12px;
       outline: none;
       flex: 1;
     }
-    .form-textarea {
-      background: #1a2137;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
-      color: #e5e7eb;
+    .prop-textarea {
+      background: #0b101c;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      color: #fff;
       padding: 6px 8px;
-      font-size: 12px;
+      font-size: 11px;
+      font-family: var(--font-mono);
       outline: none;
       resize: vertical;
-      min-height: 50px;
-      font-family: inherit;
+      min-height: 48px;
     }
-    .form-hint {
+    .prop-hint {
       font-size: 11px;
-      color: #64748b;
+      color: var(--text-dim);
       line-height: 1.4;
     }
-    .form-hint.warn { color: var(--amber); }
+    .prop-hint.alert { color: var(--amber); }
 
-    .btn-debug-row {
-      display: flex;
-      gap: 6px;
-    }
-    .btn-debug-action {
-      background: #1a2137;
-      color: #cbd5e1;
-      border: 1px solid var(--border-light);
-      border-radius: 3px;
-      padding: 5px 10px;
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .btn-debug-action:hover { background: #242e4d; color: #fff; }
-
-    .modal-footer {
+    .dialog-footer {
       background: #111827;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--border-medium);
       padding: 10px 14px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
+      gap: 8px;
     }
-    .btn-save-modal {
-      background: var(--accent);
+    .btn-save-specs {
+      background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
       color: #fff;
       border: none;
-      border-radius: 3px;
-      padding: 8px 24px;
+      border-radius: var(--radius-sm);
+      padding: 7px 20px;
       font-size: 12px;
       font-weight: 800;
       cursor: pointer;
     }
-    .btn-save-modal:hover { background: var(--accent-hover); }
-    .btn-cancel-modal {
-      background: #232b45;
-      color: #cbd5e1;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 8px 18px;
+    .btn-cancel-specs {
+      background: #1e293b;
+      color: var(--text-sub);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 7px 16px;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
       cursor: pointer;
     }
-    .btn-cancel-modal:hover { background: #323d5f; }
   </style>
 </head>
 <body>
 
-  <!-- TOP TITLE BAR -->
-  <div class="title-bar">
-    <div class="title-left">
-      <div class="brand-title">
-        <span>🪶</span> <span class="purple">MC BOT CONTROL</span>
+  <!-- ── TOP BAR ── -->
+  <header class="app-header">
+    <div style="display: flex; align-items: center;">
+      <div class="brand-wrap">
+        <div class="brand-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
+        </div>
+        <span>MC BOT CONTROL</span>
       </div>
-      <label class="filter-check">
-        <input type="checkbox" id="chkHideDebug"> Ẩn debug
-      </label>
-      <label class="filter-check">
-        <input type="checkbox" id="chkHideChat"> Ẩn chat
-      </label>
+      <div class="header-filters">
+        <label class="chk-label">
+          <input type="checkbox" id="chkHideDebug"> Ẩn debug
+        </label>
+        <label class="chk-label">
+          <input type="checkbox" id="chkHideChat"> Ẩn chat
+        </label>
+      </div>
     </div>
-    <div class="title-right">
-      <div class="header-ip">
-        <span>🌐</span> <span id="topIp">14.233.168.230</span>
+    <div class="header-right">
+      <div class="network-pill">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span id="topIp">14.233.168.230</span>
       </div>
-      <div id="connDot" class="conn-dot" title="Trạng thái kết nối"></div>
+      <div id="connDot" class="pulse-indicator" title="Kết nối máy chủ"></div>
     </div>
-  </div>
+  </header>
 
-  <!-- MAIN VIEW -->
-  <div class="app-main">
+  <!-- ── WORKSPACE ── -->
+  <main class="app-workspace">
 
-    <!-- CỘT TRÁI: LOG VÀ CHAT -->
-    <div class="left-pane">
-      <div id="centerIpBanner" class="chat-ip-banner">
-        <span>🌐 14.233.168.230</span>
-      </div>
-      <div class="chat-sub-bar">
-        <span class="chat-sub-title">CHAT</span>
-        <button class="btn-clear" onclick="clearChat()">🗑 Xoá</button>
-      </div>
-      <div id="chatBody" class="chat-body"></div>
-      <div class="chat-footer-wrap">
-        <div class="chat-footer-label">CHAT (gửi tin nhắn / lệnh trong game)</div>
-        <div class="chat-input-row">
-          <input type="text" id="chatInput" class="chat-input" placeholder="Nhập lệnh hoặc chat..." onkeydown="if(event.key==='Enter') sendChat()">
-          <button class="btn-chat-send" onclick="sendChat()">📤 Gửi</button>
+    <!-- CỘT TRÁI: CONSOLE STREAM -->
+    <section class="console-pane">
+      <div class="console-topbar">
+        <div class="console-ip-glow">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span id="centerIpBanner">14.233.168.230</span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn-action-ghost" onclick="clearChat()">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Xoá log
+          </button>
         </div>
       </div>
-    </div>
+      <div id="chatBody" class="console-stream"></div>
+      <div class="console-input-bar">
+        <input type="text" id="chatInput" class="console-input" placeholder="Gửi tin nhắn hoặc lệnh (/login, /home, /tp...)" onkeydown="if(event.key==='Enter') sendChat()">
+        <button class="btn-submit" onclick="sendChat()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Gửi
+        </button>
+      </div>
+    </section>
 
-    <!-- CỘT PHẢI: ĐIỀU KHIỂN & BOT -->
-    <div class="right-pane">
+    <!-- CỘT PHẢI: HARDWARE CONTROLS & BOT ROSTER -->
+    <aside class="controls-pane">
 
-      <!-- CARD: ĐIỀU KHIỂN -->
-      <div class="ctrl-card">
-        <div class="ctrl-card-title">
-          <span>🎮 ĐIỀU KHIỂN</span>
+      <!-- HARDWARE D-PAD & TOGGLES -->
+      <div class="widget-panel">
+        <div class="widget-header">
+          <span>ĐIỀU KHIỂN THAO TÁC</span>
         </div>
 
-        <!-- WASD -->
-        <div class="wasd-container">
+        <!-- WASD KEYCAPS -->
+        <div class="dpad-grid">
           <div></div>
-          <button class="btn-wasd" onclick="sendMove('move_forward')">W</button>
+          <button class="keycap-btn" onclick="sendMove('move_forward')">W</button>
           <div></div>
-          <button class="btn-wasd" onclick="sendMove('move_left')">A</button>
-          <button class="btn-wasd" onclick="sendMove('move_back')">S</button>
-          <button class="btn-wasd" onclick="sendMove('move_right')">D</button>
+          <button class="keycap-btn" onclick="sendMove('move_left')">A</button>
+          <button class="keycap-btn" onclick="sendMove('move_back')">S</button>
+          <button class="keycap-btn" onclick="sendMove('move_right')">D</button>
         </div>
-        <button class="btn-jump-action" onclick="sendMove('move_jump')">🦘 NHẢY</button>
+        <button class="jump-btn-bar" onclick="sendMove('move_jump')">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+          NHẢY
+        </button>
 
-        <!-- 3 TOGGLES -->
-        <div class="toggle-row">
-          <button id="btnAfk" class="btn-main-toggle" onclick="toggleBtn('afk')">
-            🛡️ AFK<br><span id="txtAfk">TẮT</span>
-          </button>
-          <button id="btnFarm" class="btn-main-toggle" onclick="toggleBtn('farm')">
-            ⚔️ FARM<br><span id="txtFarm">TẮT</span>
-          </button>
-          <button id="btnStorage" class="btn-main-toggle" onclick="toggleBtn('storage')">
-            📦 CHEST<br><span id="txtStorage">TẮT</span>
-          </button>
+        <!-- 3 TACTILE TILES -->
+        <div class="toggles-strip">
+          <div id="btnAfk" class="tactile-tile" onclick="toggleBtn('afk')">
+            <div class="tile-led"></div>
+            <span class="tile-label">AFK GUARD</span>
+            <span id="txtAfk" class="tile-val">OFF</span>
+          </div>
+          <div id="btnFarm" class="tactile-tile" onclick="toggleBtn('farm')">
+            <div class="tile-led"></div>
+            <span class="tile-label">AUTO FARM</span>
+            <span id="txtFarm" class="tile-val">OFF</span>
+          </div>
+          <div id="btnStorage" class="tactile-tile" onclick="toggleBtn('storage')">
+            <div class="tile-led"></div>
+            <span class="tile-label">CHEST OPEN</span>
+            <span id="txtStorage" class="tile-val">OFF</span>
+          </div>
         </div>
 
-        <!-- SELECTOR -->
-        <div class="bot-select-row">
-          <span>🎯</span>
-          <select id="botSelectDropdown" class="select-dropdown" onchange="selectBotFromDropdown(this.value)">
-            <option value="">Chọn bot</option>
+        <!-- ACTIVE BOT SELECT -->
+        <div class="selector-block">
+          <svg class="icon icon-sm" style="color:var(--primary);" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <select id="botSelectDropdown" class="cyber-select" onchange="selectBotFromDropdown(this.value)">
+            <option value="">Chọn bot mục tiêu</option>
           </select>
         </div>
-        <div id="itemDisplay" class="item-in-hand">🎒 Chưa có</div>
+        <div id="itemDisplay" class="item-radar">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+          <span>Chưa có item</span>
+        </div>
       </div>
 
-      <!-- CARD: DANH SÁCH BOT -->
-      <div class="ctrl-card" style="flex: 1;">
-        <div class="ctrl-card-title">
-          <span>🤖 BOT</span>
-          <span id="botCount">0/0</span>
+      <!-- BOT ROSTER PANEL -->
+      <div class="widget-panel" style="flex: 1;">
+        <div class="widget-header">
+          <span>DANH SÁCH TÀI KHOẢN</span>
+          <span id="botCount" style="color:var(--primary); font-family:var(--font-mono);">0/0</span>
         </div>
 
         <!-- SEARCH -->
-        <div class="search-row">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="botSearchInput" class="search-input" placeholder="Tìm kiếm bot..." oninput="renderBots()">
-          <button class="clear-search-btn" onclick="clearSearch()">✕</button>
+        <div class="search-box-wrap">
+          <svg class="icon icon-sm search-glyph" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="botSearchInput" class="search-field" placeholder="Tìm theo tên..." oninput="renderBots()">
+          <button class="search-clear-x" onclick="clearSearch()">✕</button>
         </div>
 
         <!-- TABS -->
-        <div class="filter-row">
-          <button class="filter-tab active" onclick="setTab('all', this)">Tất cả</button>
-          <button class="filter-tab" onclick="setTab('running', this)">▶ Chạy</button>
-          <button class="filter-tab" onclick="setTab('stopped', this)">⏹ Dừng</button>
+        <div class="tab-pills">
+          <button class="tab-pill-btn active" onclick="setTab('all', this)">TẤT CẢ</button>
+          <button class="tab-pill-btn" onclick="setTab('running', this)">ĐANG CHẠY</button>
+          <button class="tab-pill-btn" onclick="setTab('stopped', this)">ĐÃ DỪNG</button>
         </div>
 
-        <!-- BOT LIST -->
-        <div id="botListContainer" class="bot-items-scroll"></div>
+        <!-- SCROLL ROSTER -->
+        <div id="botListContainer" class="roster-list"></div>
 
-        <!-- ADD BOT -->
-        <div class="add-bot-section">
-          <div class="add-label">➕ Tạo tài khoản mới (nhập username):</div>
-          <div class="add-input-row">
-            <input type="text" id="newUsername" class="add-input" placeholder="Username" onkeydown="if(event.key==='Enter') createBot()">
-            <button class="btn-add-action" onclick="createBot()">➕ Tạo</button>
+        <!-- ENROLL BOT -->
+        <div class="enroll-box">
+          <span class="enroll-label">Tạo tài khoản mới</span>
+          <div class="enroll-row">
+            <input type="text" id="newUsername" class="enroll-input" placeholder="Nhập username..." onkeydown="if(event.key==='Enter') createBot()">
+            <button class="btn-enroll-action" onclick="createBot()">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Tạo
+            </button>
           </div>
         </div>
       </div>
 
-    </div>
-  </div>
+    </aside>
+  </main>
 
-  <!-- MODAL: CẤU HÌNH BOT (100% Y CHANG ẢNH 2, 3, 4) -->
-  <div id="settingsModal" class="modal-overlay">
-    <div class="modal-window">
-      <!-- HEADER -->
-      <div class="modal-header">
-        <div class="modal-title-left">
-          <span style="font-size: 14px;">⚙️</span>
-          <span id="modalBotName" class="modal-title-name">username</span>
-          <span class="modal-title-sub">Cấu hình bot</span>
+  <!-- ── MODAL SPECS: PROXY & COMBAT (ZERO AI CLICHE, PURE CRAFT) ── -->
+  <div id="settingsModal" class="modal-veil">
+    <div class="modal-dialog">
+      <div class="dialog-header">
+        <div class="dialog-title-group">
+          <svg class="icon icon-lg" style="color:var(--primary);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span id="modalBotName" class="dialog-title-main">Bot Specifications</span>
+          <span class="dialog-title-sub">Cấu hình tham số</span>
         </div>
-        <button class="modal-close-x" onclick="closeSettingsModal()">✕</button>
+        <button class="btn-dialog-close" onclick="closeSettingsModal()">✕</button>
       </div>
 
-      <!-- BODY SCROLL -->
-      <div class="modal-body">
+      <div class="dialog-scroll-body">
 
-        <!-- 1. COMBAT -->
-        <div class="modal-section">
-          <div class="sec-title combat">⚔️ Combat</div>
-          <div class="form-row">
-            <label>Phạm vi đánh</label>
-            <input type="number" step="0.1" id="cfgFarmRange" class="form-input" style="width: 100px;" value="2.9">
+        <!-- 1. COMBAT ENGINE -->
+        <div class="spec-block">
+          <div class="spec-head combat">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/></svg>
+            Combat Engine
           </div>
-          <div class="form-row">
-            <label>Bán kính quét</label>
-            <input type="number" step="0.1" id="cfgFarmRadius" class="form-input" style="width: 100px;" value="20.0">
+          <div class="prop-row">
+            <label>Phạm vi đánh (reach)</label>
+            <input type="number" step="0.1" id="cfgFarmRange" class="prop-input" style="width: 90px;" value="2.9">
           </div>
-          <div class="form-row">
-            <label>⚡ Tốc độ</label>
-            <select id="cfgSpeedPreset" class="form-select" onchange="onSpeedPresetChange(this.value)">
+          <div class="prop-row">
+            <label>Bán kính quét (radius)</label>
+            <input type="number" step="0.1" id="cfgFarmRadius" class="prop-input" style="width: 90px;" value="20.0">
+          </div>
+          <div class="prop-row">
+            <label>Preset tốc độ</label>
+            <select id="cfgSpeedPreset" class="prop-select" onchange="onSpeedPresetChange(this.value)">
               <option value="Cực nhanh">Cực nhanh</option>
               <option value="Nhanh">Nhanh</option>
               <option value="Vừa" selected>Vừa</option>
@@ -861,156 +1010,164 @@
               <option value="Tùy chỉnh">Tùy chỉnh</option>
             </select>
           </div>
-          <div class="form-row">
-            <label>Delay min/max (s):</label>
+          <div class="prop-row">
+            <label>Delay min / max (giây)</label>
             <div style="display: flex; align-items: center; gap: 4px;">
-              <input type="number" step="0.01" id="cfgFarmMinDelay" class="form-input" style="width: 60px;" value="0.5">
-              <span>→</span>
-              <input type="number" step="0.01" id="cfgFarmMaxDelay" class="form-input" style="width: 60px;" value="0.8">
+              <input type="number" step="0.01" id="cfgFarmMinDelay" class="prop-input" style="width: 65px;" value="0.5">
+              <span style="color:var(--text-dim);">→</span>
+              <input type="number" step="0.01" id="cfgFarmMaxDelay" class="prop-input" style="width: 65px;" value="0.8">
             </div>
           </div>
-          <div class="form-hint warn">⚠️ Delay thấp = đánh nhanh nhưng dễ bị nghi hack</div>
-          <div class="form-row">
-            <label>🎯 Chế độ đánh</label>
-            <select id="cfgAttackMode" class="form-select">
-              <option value="Logic cũ" selected>Logic cũ</option>
-              <option value="Smart Aim (Logic mới)">Smart Aim (Logic mới)</option>
+          <div class="prop-hint alert">Delay thấp = tốc độ cao nhưng có nguy cơ bị anti-cheat phát hiện.</div>
+          <div class="prop-row">
+            <label>Thuật toán raycast</label>
+            <select id="cfgAttackMode" class="prop-select">
+              <option value="Logic cũ" selected>Logic cũ (Khoảng cách thuần)</option>
+              <option value="Smart Aim (Logic mới)">Smart Aim (Raycast thông minh)</option>
             </select>
           </div>
-          <label class="filter-check">
-            <input type="checkbox" id="cfgFarmLookat" checked> 🗡️ Look At (tự xoay mặt về mob trước khi chém)
+          <label class="chk-label">
+            <input type="checkbox" id="cfgFarmLookat" checked> Look At (Tự động xoay mặt vào hitbox hở trước khi chém)
           </label>
-          <div class="form-hint">
-            Bật Look At: bot tự tìm điểm còn hở trên mob (quét từ chân lên đầu) và xoay mặt về đúng điểm đó trước khi vung kiếm, tránh hụt dame ở farm bịt kín. Tắt Look At: đánh y hệt Logic cũ (chỉ dựa khoảng cách, không xoay mặt).
-          </div>
-          <div class="form-hint">
-            ⚡ Tốc độ / Delay min-max random ở trên áp dụng cho cả 2 chế độ.
-          </div>
+          <div class="prop-hint">Bật Look At: quét hitbox từ chân lên đầu để tìm điểm xuyên thấu, tránh hụt dame ở farm bịt kín.</div>
         </div>
 
-        <!-- 2. TỰ ĐỘNG BẬT LẠI -->
-        <div class="modal-section">
-          <div class="sec-title auto">🛡️ Tự bật lại khi mất kết nối</div>
-          <label class="filter-check">
-            <input type="checkbox" id="cfgAfkPersist"> 🛡️ AFK tự bật lại
+        <!-- 2. AUTO RECOVERY -->
+        <div class="spec-block">
+          <div class="spec-head auto">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Tự động khôi phục
+          </div>
+          <label class="chk-label">
+            <input type="checkbox" id="cfgAfkPersist"> AFK Guard tự kích hoạt lại
           </label>
-          <label class="filter-check">
-            <input type="checkbox" id="cfgFarmPersist" checked> ⚔️ Farm tự bật lại
+          <label class="chk-label">
+            <input type="checkbox" id="cfgFarmPersist" checked> Auto Farm tự kích hoạt lại sau login
           </label>
         </div>
 
-        <!-- 3. ITEM MỤC TIÊU -->
-        <div class="modal-section">
-          <div class="sec-title item">📄 Item mục tiêu</div>
-          <div class="form-row">
+        <!-- 3. TARGET ITEM -->
+        <div class="spec-block">
+          <div class="spec-head item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Vật phẩm mục tiêu
+          </div>
+          <div class="prop-row">
             <label>Item ID (F3+H)</label>
-            <input type="text" id="cfgTargetItemId" class="form-input" style="flex: 1;">
+            <input type="text" id="cfgTargetItemId" class="prop-input" style="flex: 1;" placeholder="vd: diamond, rotten_flesh">
           </div>
-          <label class="filter-check">
-            <input type="checkbox" id="cfgOnlyPickup"> 🗑 Tự vứt item khác mục tiêu
+          <label class="chk-label">
+            <input type="checkbox" id="cfgOnlyPickup"> Tự vứt bỏ item khác ID mục tiêu
           </label>
-          <div class="form-hint">Dùng chung Item ID cho mục này và Chest Open bên dưới</div>
         </div>
 
-        <!-- 4. CHEST OPEN -->
-        <div class="modal-section">
-          <div class="sec-title chest">📦 Chest Open (tự cất đồ)</div>
-          <div class="form-row">
-            <label>Số lượng cần đạt</label>
-            <input type="number" id="cfgTargetAmount" class="form-input" style="width: 100px;" value="0">
+        <!-- 4. CHEST AUTOMATION -->
+        <div class="spec-block">
+          <div class="spec-head chest">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            Chest Automation (Tự cất đồ)
           </div>
-          <div class="form-row">
-            <label>Delay vòng 2 (ms)</label>
-            <input type="number" id="cfgStorageLoopDelay" class="form-input" style="width: 100px;" value="8000">
+          <div class="prop-row">
+            <label>Ngưỡng số lượng kích hoạt</label>
+            <input type="number" id="cfgTargetAmount" class="prop-input" style="width: 90px;" value="0">
+          </div>
+          <div class="prop-row">
+            <label>Delay vòng lặp (ms)</label>
+            <input type="number" id="cfgStorageLoopDelay" class="prop-input" style="width: 90px;" value="8000">
           </div>
           <div>
-            <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">Chuỗi lệnh trước/sau khi mở rương:</div>
-            <textarea id="cfgStorageCommands" class="form-textarea" style="width: 100%;"></textarea>
+            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 3px;">Chuỗi macro lệnh trước/sau mở rương:</div>
+            <textarea id="cfgStorageCommands" class="prop-textarea" style="width: 100%;"></textarea>
           </div>
-          <div class="form-hint">Cú pháp: "lệnh1 delay1(ms), lệnh2 delay2(ms), ..."</div>
-          <label class="filter-check">
-            <input type="checkbox" id="cfgStoragePersist"> 📦 Chest Open tự bật lại
+          <div class="prop-hint">Cú pháp: "lenh1 delay1(ms), lenh2 delay2(ms)..."</div>
+          <label class="chk-label">
+            <input type="checkbox" id="cfgStoragePersist"> Tự động bật lại Chest Open sau reconnect
           </label>
         </div>
 
-        <!-- 5. DI CHUYỂN DELTA -->
-        <div class="modal-section">
-          <div class="sec-title move">📍 Di chuyển (delta X/Y/Z)</div>
+        <!-- 5. DELTA NAVIGATION -->
+        <div class="spec-block">
+          <div class="spec-head move">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            Định vị di chuyển (Delta X/Y/Z)
+          </div>
           <div style="display: flex; gap: 8px;">
-            <div class="form-row" style="flex: 1;">
-              <label>X</label>
-              <input type="number" step="0.1" id="cfgMoveX" class="form-input" style="width: 60px;" value="0.0">
+            <div class="prop-row" style="flex: 1;">
+              <label>ΔX</label>
+              <input type="number" step="0.1" id="cfgMoveX" class="prop-input" style="width: 55px;" value="0.0">
             </div>
-            <div class="form-row" style="flex: 1;">
-              <label>Y</label>
-              <input type="number" step="0.1" id="cfgMoveY" class="form-input" style="width: 60px;" value="0.0">
+            <div class="prop-row" style="flex: 1;">
+              <label>ΔY</label>
+              <input type="number" step="0.1" id="cfgMoveY" class="prop-input" style="width: 55px;" value="0.0">
             </div>
-            <div class="form-row" style="flex: 1;">
-              <label>Z</label>
-              <input type="number" step="0.1" id="cfgMoveZ" class="form-input" style="width: 60px;" value="-1.0">
+            <div class="prop-row" style="flex: 1;">
+              <label>ΔZ</label>
+              <input type="number" step="0.1" id="cfgMoveZ" class="prop-input" style="width: 55px;" value="-1.0">
             </div>
           </div>
-          <div class="form-hint">Giống Baritone "#goto ~dx ~dy ~dz" (mặc định ~ ~ ~-1)</div>
-          <label class="filter-check">
-            <input type="checkbox" id="cfgLockPitchYaw" onchange="togglePitchYawFields(this.checked)"> 🔒 Khoá góc nhìn (Pitch/Yaw) khi di chuyển
+          <label class="chk-label">
+            <input type="checkbox" id="cfgLockPitchYaw" onchange="togglePitchYawFields(this.checked)"> Khoá cố định góc nhìn (Pitch / Yaw) khi di chuyển
           </label>
-          <div style="display: flex; gap: 12px;">
-            <div class="form-row" style="flex: 1;">
+          <div style="display: flex; gap: 10px;">
+            <div class="prop-row" style="flex: 1;">
               <label>Pitch</label>
-              <input type="number" step="0.1" id="cfgPitch" class="form-input" style="width: 70px;" value="0.0">
+              <input type="number" step="0.1" id="cfgPitch" class="prop-input" style="width: 65px;" value="0.0">
             </div>
-            <div class="form-row" style="flex: 1;">
+            <div class="prop-row" style="flex: 1;">
               <label>Yaw</label>
-              <input type="number" step="0.1" id="cfgYaw" class="form-input" style="width: 70px;" value="0.0">
+              <input type="number" step="0.1" id="cfgYaw" class="prop-input" style="width: 65px;" value="0.0">
             </div>
           </div>
         </div>
 
-        <!-- 6. CÔNG CỤ DEBUG -->
-        <div class="modal-section">
-          <div class="sec-title debug">🛠 Công cụ Debug</div>
-          <div class="btn-debug-row">
-            <button class="btn-debug-action" onclick="debugAction('debug_goto')">📍 Test di chuyển</button>
-            <button class="btn-debug-action" onclick="debugAction('reset_goto')">🔄 Reset</button>
-            <button class="btn-debug-action" onclick="debugAction('right_click')">🖱️ Chuột phải</button>
+        <!-- 6. DIAGNOSTIC TOOLS -->
+        <div class="spec-block">
+          <div class="spec-head debug">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Công cụ chuẩn đoán
           </div>
-          <div id="debugStatusLabel" class="form-hint" style="color: var(--cyan); min-height: 16px;"></div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn-action-ghost" onclick="debugAction('debug_goto')">Test di chuyển</button>
+            <button class="btn-action-ghost" onclick="debugAction('reset_goto')">Reset Navigation</button>
+            <button class="btn-action-ghost" onclick="debugAction('right_click')">Click chuột phải</button>
+          </div>
+          <div id="debugStatusLabel" class="prop-hint" style="color:var(--cyan); min-height: 14px;"></div>
         </div>
 
-        <!-- 7. PROXY SOCKS5 (ĐỔI IP) -->
-        <div class="modal-section">
-          <div class="sec-title proxy">🌐 Proxy SOCKS5</div>
-          <label class="filter-check">
-            <input type="checkbox" id="cfgProxyEnabled" onchange="toggleProxyFields(this.checked)"> Bật proxy cho bot này
+        <!-- 7. SOCKS5 PROXY GATEWAY -->
+        <div class="spec-block">
+          <div class="spec-head proxy">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            SOCKS5 Proxy Gateway (Đổi IP)
+          </div>
+          <label class="chk-label">
+            <input type="checkbox" id="cfgProxyEnabled" onchange="toggleProxyFields(this.checked)"> Kích hoạt SOCKS5 Proxy cho bot này
           </label>
-          <div class="form-row">
-            <label>Host</label>
-            <input type="text" id="cfgProxyHost" class="form-input" style="flex: 1;" placeholder="vd: xxproxy.ddns.net">
+          <div class="prop-row">
+            <label>Host / IP</label>
+            <input type="text" id="cfgProxyHost" class="prop-input" style="flex: 1;" placeholder="vd: xxproxy.ddns.net">
           </div>
-          <div class="form-row">
+          <div class="prop-row">
             <label>Port</label>
-            <input type="number" id="cfgProxyPort" class="form-input" style="flex: 1;" placeholder="vd: 12804">
+            <input type="number" id="cfgProxyPort" class="prop-input" style="flex: 1;" placeholder="vd: 1080">
           </div>
-          <div class="form-row">
+          <div class="prop-row">
             <label>User (nếu có)</label>
-            <input type="text" id="cfgProxyUser" class="form-input" style="flex: 1;">
+            <input type="text" id="cfgProxyUser" class="prop-input" style="flex: 1;">
           </div>
-          <div class="form-row">
+          <div class="prop-row">
             <label>Pass (nếu có)</label>
-            <input type="password" id="cfgProxyPass" class="form-input" style="flex: 1;">
+            <input type="password" id="cfgProxyPass" class="prop-input" style="flex: 1;">
           </div>
-          <div class="form-hint warn">⚠️ Proxy mới chỉ áp dụng ở lần Start/Reconnect kế tiếp</div>
-          <div class="form-hint">
-            ℹ️ Bỏ tick chỉ TẠM NGƯNG dùng proxy - Host/Port/User/Pass đã điền vẫn được giữ lại, tick lại là dùng ngay không cần nhập lại.
-          </div>
+          <div class="prop-hint alert">Proxy mới sẽ áp dụng ở lần Start / Reconnect tiếp theo.</div>
+          <div class="prop-hint">Bỏ tick chỉ tạm ngưng dùng proxy mà không xoá thông tin cấu hình đã lưu.</div>
         </div>
 
       </div>
 
-      <!-- FOOTER -->
-      <div class="modal-footer">
-        <button class="btn-save-modal" onclick="saveBotSettings()">💾 LƯU</button>
-        <button class="btn-cancel-modal" onclick="closeSettingsModal()">✕ Huỷ</button>
+      <div class="dialog-footer">
+        <button class="btn-cancel-specs" onclick="closeSettingsModal()">Đóng</button>
+        <button class="btn-save-specs" onclick="saveBotSettings()">LƯU CẤU HÌNH</button>
       </div>
     </div>
   </div>
@@ -1026,11 +1183,16 @@
     let ws = null;
     let selectedBot = null;
     let activeTab = 'all';
-    let bots = {};           // { username: { running, anti_afk, auto_farm, auto_storage, ip, item, settings, password } }
+    let bots = {};
     let savedAccounts = [];
     let currentModalBot = null;
 
-    // KẾT NỐI WEBSOCKET
+    // ── HIGH-PERFORMANCE 60FPS DOM BATCH LOGGING (NO LAG) ──
+    const MAX_DOM_LINES = 500;
+    let logQueue = [];
+    let renderTimer = null;
+    let renderBotsScheduled = false;
+
     function initWs() {
       const isHttps = location.protocol === 'https:';
       const wsUrl = (isHttps ? 'wss://' : 'ws://') + location.host;
@@ -1039,14 +1201,14 @@
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        dot.classList.add('online');
-        appendLog(null, '🔌 Đã kết nối thành công tới WebSocket Cloud Server 24/7!', '#22c55e');
+        dot.classList.add('live');
+        appendLog(null, 'Kết nối thành công tới WebSocket Cloud Server (Multi-device live sync active)', '#10b981');
         ws.send(JSON.stringify({ action: 'get_all_status' }));
         ws.send(JSON.stringify({ action: 'get_saved_accounts' }));
       };
 
       ws.onclose = () => {
-        dot.classList.remove('online');
+        dot.classList.remove('live');
         setTimeout(initWs, 3000);
       };
 
@@ -1058,17 +1220,6 @@
           onMessageReceived(data);
         } catch (err) {}
       };
-    }
-
-    let renderBotsScheduled = false;
-    function scheduleRenderBots() {
-      if (!renderBotsScheduled) {
-        renderBotsScheduled = true;
-        requestAnimationFrame(() => {
-          renderBotsScheduled = false;
-          renderBots();
-        });
-      }
     }
 
     function onMessageReceived(data) {
@@ -1099,7 +1250,7 @@
         if (selectedBot === username) updateSelectedUI();
       } else if (type === 'log') {
         const msg = args[0] || '';
-        const color = args[1] || '#8b949e';
+        const color = args[1] || '#94a3b8';
         appendLog(null, msg, color);
       } else if (type === 'chat_history') {
         const history = args[0] || [];
@@ -1111,22 +1262,30 @@
         if (bots[username]) bots[username].ip = ip;
         if (selectedBot === username) {
           document.getElementById('topIp').innerText = ip || '14.233.168.230';
-          document.getElementById('centerIpBanner').innerHTML = `<span>🌐 ${ip || '14.233.168.230'}</span>`;
+          document.getElementById('centerIpBanner').innerText = ip || '14.233.168.230';
         }
         scheduleRenderBots();
       } else if (type === 'item') {
         const [username, item] = args;
         if (bots[username]) bots[username].item = item;
         if (selectedBot === username) {
-          document.getElementById('itemDisplay').innerText = item ? `🎒 ${item}` : '🎒 Chưa có';
+          document.getElementById('itemDisplay').innerHTML = `
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+            <span>${item ? escapeHtml(item) : 'Chưa có item'}</span>
+          `;
         }
       }
     }
 
-    // LOGGING & BATCH RENDER (TỐI ƯU HOÁ CHỐNG LAG KHI CHẠY NHIỀU BOT)
-    const MAX_DOM_LINES = 500;
-    let logQueue = [];
-    let renderTimer = null;
+    function scheduleRenderBots() {
+      if (!renderBotsScheduled) {
+        renderBotsScheduled = true;
+        requestAnimationFrame(() => {
+          renderBotsScheduled = false;
+          renderBots();
+        });
+      }
+    }
 
     function appendLog(tag, msg, color, timestamp) {
       const isDebug = msg.toLowerCase().includes('debug') || msg.includes('📐') || msg.includes('🎯');
@@ -1138,7 +1297,7 @@
       const now = new Date();
       const timeStr = timestamp || `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
 
-      logQueue.push({ timeStr, msg, color: color || '#fff' });
+      logQueue.push({ timeStr, msg, color: color || '#f1f5f9' });
 
       if (!renderTimer) {
         renderTimer = requestAnimationFrame(flushLogQueue);
@@ -1162,11 +1321,9 @@
       logQueue = [];
       body.appendChild(frag);
 
-      // Cắt tỉa DOM để không bao giờ bị tràn RAM hoặc giật lag trình duyệt khi treo nhiều acc:
       while (body.children.length > MAX_DOM_LINES) {
         body.removeChild(body.firstChild);
       }
-
       body.scrollTop = body.scrollHeight;
     }
 
@@ -1180,7 +1337,7 @@
         const line = document.createElement('div');
         line.style.display = 'flex';
         line.style.gap = '8px';
-        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.time || ''}</span><span style="color:${item.color || '#fff'}; flex:1; word-break:break-word;">${escapeHtml(item.msg)}</span>`;
+        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.time || ''}</span><span style="color:${item.color || '#f1f5f9'}; flex:1; word-break:break-word;">${escapeHtml(item.msg)}</span>`;
         frag.appendChild(line);
       }
       body.appendChild(frag);
@@ -1198,7 +1355,7 @@
       return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // RENDER BOT LIST
+    // ── BOT ROSTER RENDERING ──
     function renderBots() {
       const container = document.getElementById('botListContainer');
       container.innerHTML = '';
@@ -1224,7 +1381,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<div style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Không có tài khoản nào</div>';
+        container.innerHTML = '<div style="color:#64748b;font-size:11px;text-align:center;padding:16px;">Không có bot nào</div>';
         return;
       }
 
@@ -1234,25 +1391,36 @@
         const currentIp = bot.ip || '14.233.168.230';
 
         const item = document.createElement('div');
-        item.className = `bot-card-item ${selectedBot === name ? 'selected' : ''}`;
+        item.className = `bot-card ${selectedBot === name ? 'selected' : ''}`;
         item.onclick = (e) => {
-          if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+          if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('button')) return;
           selectBot(name);
         };
 
         item.innerHTML = `
-          <div class="bot-card-top">
-            <span class="bot-play-icon">▶</span>
-            <span style="color: ${isRunning ? '#22c55e' : '#fff'};">${name}</span>
-            <span class="bot-card-ip">🌐 ${currentIp}</span>
+          <div class="bot-card-meta">
+            <div class="bot-id-wrap">
+              <span class="bot-status-dot ${isRunning ? 'active' : ''}"></span>
+              <span class="bot-name-text">${name}</span>
+            </div>
+            <span class="bot-ip-tag">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+              ${currentIp}
+            </span>
           </div>
-          <div class="bot-card-controls">
-            <input type="password" id="pwd_${name}" class="pwd-input" value="${bot.password || ''}" placeholder="Mật khẩu" oninput="onPasswordChange('${name}', this.value)">
-            <button class="btn-cfg" onclick="openSettingsModal('${name}')">⚙️</button>
-            <button class="btn-run-action ${isRunning ? '' : 'start'}" onclick="toggleBotRun('${name}')">
-              ${isRunning ? '⏹ DỪNG' : '▶ CHẠY'}
+          <div class="bot-card-actions">
+            <input type="password" id="pwd_${name}" class="auth-input" value="${bot.password || ''}" placeholder="Mật khẩu" oninput="onPasswordChange('${name}', this.value)">
+            <button class="btn-icon-cmd" title="Cài đặt bot" onclick="openSettingsModal('${name}')">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
-            <button class="btn-del-action" onclick="deleteBot('${name}')">🗑</button>
+            <button class="btn-toggle-engine ${isRunning ? 'stop' : 'start'}" onclick="toggleBotRun('${name}')">
+              ${isRunning 
+                ? '<svg class="icon icon-sm" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG' 
+                : '<svg class="icon icon-sm" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY'}
+            </button>
+            <button class="btn-trash-bot" title="Xóa session" onclick="deleteBot('${name}')">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
           </div>
         `;
         container.appendChild(item);
@@ -1270,7 +1438,7 @@
       const bot = bots[name] || {};
       const ip = bot.ip || '14.233.168.230';
       document.getElementById('topIp').innerText = ip;
-      document.getElementById('centerIpBanner').innerHTML = `<span>🌐 ${ip}</span>`;
+      document.getElementById('centerIpBanner').innerText = ip;
       renderBots();
       updateSelectedUI();
     }
@@ -1286,7 +1454,7 @@
         ...Object.keys(bots)
       ])).filter(Boolean);
 
-      select.innerHTML = '<option value="">Chọn bot</option>' + allNames.map(n => `<option value="${n}" ${selectedBot === n ? 'selected' : ''}>${n}</option>`).join('');
+      select.innerHTML = '<option value="">Chọn bot mục tiêu</option>' + allNames.map(n => `<option value="${n}" ${selectedBot === n ? 'selected' : ''}>${n}</option>`).join('');
     }
 
     function updateSelectedUI() {
@@ -1298,10 +1466,10 @@
       const txtAfk = document.getElementById('txtAfk');
       if (bot.anti_afk) {
         btnAfk.classList.add('active');
-        txtAfk.innerText = 'BẬT';
+        txtAfk.innerText = 'ON';
       } else {
         btnAfk.classList.remove('active');
-        txtAfk.innerText = 'TẮT';
+        txtAfk.innerText = 'OFF';
       }
 
       // FARM
@@ -1309,10 +1477,10 @@
       const txtFarm = document.getElementById('txtFarm');
       if (bot.auto_farm) {
         btnFarm.classList.add('active');
-        txtFarm.innerText = 'BẬT';
+        txtFarm.innerText = 'ON';
       } else {
         btnFarm.classList.remove('active');
-        txtFarm.innerText = 'TẮT';
+        txtFarm.innerText = 'OFF';
       }
 
       // CHEST
@@ -1320,16 +1488,19 @@
       const txtStorage = document.getElementById('txtStorage');
       if (bot.auto_storage) {
         btnStorage.classList.add('active');
-        txtStorage.innerText = 'BẬT';
+        txtStorage.innerText = 'ON';
       } else {
         btnStorage.classList.remove('active');
-        txtStorage.innerText = 'TẮT';
+        txtStorage.innerText = 'OFF';
       }
 
-      document.getElementById('itemDisplay').innerText = bot.item ? `🎒 ${bot.item}` : '🎒 Chưa có';
+      document.getElementById('itemDisplay').innerHTML = `
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        <span>${bot.item ? escapeHtml(bot.item) : 'Chưa có item'}</span>
+      `;
     }
 
-    // ACTIONS
+    // ── OPERATIONS ──
     function toggleBotRun(name) {
       selectBot(name);
       const bot = bots[name] || {};
@@ -1337,7 +1508,7 @@
 
       if (isRunning) {
         ws.send(JSON.stringify({ action: 'stop_bot', username: name }));
-        appendLog(name, `⏹ Đã gửi lệnh dừng bot [${name}]`, '#ef4444');
+        appendLog(name, `⏹ Gửi lệnh dừng bot [${name}]`, '#f43f5e');
       } else {
         const s = bot.settings || {};
         const pwdInput = document.getElementById(`pwd_${name}`);
@@ -1369,7 +1540,7 @@
           lock_yaw: s.lock_yaw || 0.0,
           proxy: s.proxy || null
         }));
-        appendLog(name, `🚀 Đang khởi động bot [${name}]...`, '#2ecc71');
+        appendLog(name, `🚀 Đang khởi động bot [${name}]...`, '#10b981');
       }
     }
 
@@ -1389,13 +1560,13 @@
     }
 
     function deleteBot(name) {
-      if (!confirm(`Xóa session của bot [${name}]?`)) return;
+      if (!confirm(`Xóa session [${name}]?`)) return;
       ws.send(JSON.stringify({ action: 'delete_session', username: name }));
       if (selectedBot === name) selectedBot = null;
     }
 
     function sendChat() {
-      if (!selectedBot) { alert('Vui lòng chọn bot!'); return; }
+      if (!selectedBot) { alert('Vui lòng chọn 1 bot mục tiêu!'); return; }
       const input = document.getElementById('chatInput');
       const msg = input.value.trim();
       if (!msg) return;
@@ -1405,12 +1576,12 @@
     }
 
     function sendMove(dir) {
-      if (!selectedBot) { alert('Vui lòng chọn bot!'); return; }
+      if (!selectedBot) { alert('Vui lòng chọn bot mục tiêu!'); return; }
       ws.send(JSON.stringify({ action: dir, username: selectedBot }));
     }
 
     function toggleBtn(type) {
-      if (!selectedBot) { alert('Vui lòng chọn bot!'); return; }
+      if (!selectedBot) { alert('Vui lòng chọn bot mục tiêu!'); return; }
       const bot = bots[selectedBot] || {};
 
       if (type === 'afk') {
@@ -1424,7 +1595,7 @@
 
     function setTab(tab, btn) {
       activeTab = tab;
-      document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pill-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       renderBots();
     }
@@ -1434,7 +1605,7 @@
       renderBots();
     }
 
-    // MODAL SETTINGS
+    // ── MODAL SPECS & SOCKS5 PROXY CONFIG ──
     function openSettingsModal(name) {
       currentModalBot = name;
       document.getElementById('modalBotName').innerText = name;
@@ -1483,7 +1654,7 @@
       document.getElementById('cfgYaw').value = s.lock_yaw || 0.0;
       togglePitchYawFields(lock);
 
-      const proxyEnabled = boolProxyEnabled(proxy);
+      const proxyEnabled = (proxy.enabled !== undefined) ? !!proxy.enabled : !!proxy.host;
       document.getElementById('cfgProxyEnabled').checked = proxyEnabled;
       document.getElementById('cfgProxyHost').value = proxy.host || '';
       document.getElementById('cfgProxyPort').value = proxy.port || '';
@@ -1493,11 +1664,6 @@
 
       document.getElementById('debugStatusLabel').innerText = '';
       document.getElementById('settingsModal').classList.add('active');
-    }
-
-    function boolProxyEnabled(p) {
-      if (p.enabled !== undefined) return !!p.enabled;
-      return !!p.host;
     }
 
     function closeSettingsModal() {
@@ -1544,13 +1710,13 @@
           lock_pitch_yaw: lock, lock_pitch: pitch, lock_yaw: yaw
         }));
         ws.send(JSON.stringify({ action: 'debug_goto', username: currentModalBot }));
-        statusLbl.innerText = `📍 Test: delta=(${dx},${dy},${dz}) lock=${lock?'BẬT':'TẮT'}`;
+        statusLbl.innerText = `Test: delta=(${dx},${dy},${dz}) lock=${lock?'BẬT':'TẮT'}`;
       } else if (action === 'reset_goto') {
         ws.send(JSON.stringify({ action: 'reset_goto', username: currentModalBot }));
-        statusLbl.innerText = '🔄 Đã reset trạng thái #goto.';
+        statusLbl.innerText = 'Đã reset navigation.';
       } else if (action === 'right_click') {
         ws.send(JSON.stringify({ action: 'right_click', username: currentModalBot }));
-        statusLbl.innerText = '🖱️ Đã chuột phải theo góc nhìn hiện tại.';
+        statusLbl.innerText = 'Đã thực hiện chuột phải.';
       }
     }
 
@@ -1604,7 +1770,7 @@
         ...newSettings
       }));
 
-      appendLog(name, `✅ Đã lưu toàn bộ cấu hình & Proxy SOCKS5 cho [${name}]!`, '#22c55e');
+      appendLog(name, `Đã cập nhật cấu hình & Proxy SOCKS5 cho [${name}]`, '#10b981');
       closeSettingsModal();
       renderBots();
     }

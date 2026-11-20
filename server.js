@@ -8,7 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const WS_PORT = process.env.PORT || 54322;
 const MC_SERVER_HOST = '171.244.52.181';
 const MC_SERVER_PORT = 54321;
-const SESSION_DIR = path.join(process.env.USERPROFILE || process.env.HOME, 'Desktop', 'session_new');
+const SESSION_DIR = process.env.SESSION_DIR || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'Desktop', 'session_new') : path.join(__dirname, 'sessions'));
 
 const RUNNING_STATE_FILE = path.join(__dirname, '_running_state.json');
 
@@ -571,18 +571,42 @@ function listSavedSessions() {
         if (!fs.existsSync(SESSION_DIR)) return [];
         const files = fs.readdirSync(SESSION_DIR);
         const accounts = [];
+        const seen = new Set();
+
+        const accFile = path.join(SESSION_DIR, 'accounts.json');
+        if (fs.existsSync(accFile)) {
+            try {
+                const accList = JSON.parse(fs.readFileSync(accFile, 'utf-8'));
+                if (Array.isArray(accList)) {
+                    for (const a of accList) {
+                        if (a && a.username) {
+                            seen.add(a.username);
+                            accounts.push({
+                                username: a.username,
+                                settings: a,
+                                savedPassword: a.password || ''
+                            });
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
         for (const f of files) {
             if (f.endsWith('.json') && !f.startsWith('_') && f !== 'accounts.json') {
                 const username = f.replace('.json', '');
-                try {
-                    const data = JSON.parse(fs.readFileSync(path.join(SESSION_DIR, f), 'utf-8'));
-                    accounts.push({
-                        username,
-                        settings: data.settings || {},
-                        savedPassword: data.password || ''
-                    });
-                } catch (e) {
-                    accounts.push({ username, settings: {}, savedPassword: '' });
+                if (!seen.has(username)) {
+                    seen.add(username);
+                    try {
+                        const data = JSON.parse(fs.readFileSync(path.join(SESSION_DIR, f), 'utf-8'));
+                        accounts.push({
+                            username,
+                            settings: data.settings || {},
+                            savedPassword: data.password || ''
+                        });
+                    } catch (e) {
+                        accounts.push({ username, settings: {}, savedPassword: '' });
+                    }
                 }
             }
         }
