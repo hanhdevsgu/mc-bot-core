@@ -1,0 +1,22 @@
+[
+  {
+    "username": "hadilao",
+    "password": "tandat2804",
+    "farm_range": 4,
+    "farm_radius": 20,
+    "farm_min_delay": 0.5,
+    "farm_max_delay": 0.8,
+    "farm_smart_aim": false,
+    "farm_lookat": true,
+    "afk_persist": false,
+    "farm_persist": true,
+    "storage_persist": false,
+    "proxy": {
+      "enabled": true,
+      "host": "160.30.190.208",
+      "port": 28277,
+      "username": "",
+      "password": ""
+    }
+  }
+]

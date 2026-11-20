@@ -762,14 +762,14 @@ function flushLogBatch() {
     if (batch.length === 1) {
         const payload = JSON.stringify({ type: 'log', args: [batch[0].msg, batch[0].color, batch[0].timeStr] });
         for (const ws of wsClients) {
-            if (ws.readyState === WebSocket.OPEN && ws.isAuthenticated) {
+            if (ws.readyState === WebSocket.OPEN) {
                 try { ws.send(payload); } catch (e) {}
             }
         }
     } else {
         const payload = JSON.stringify({ type: 'logs_batch', args: [batch] });
         for (const ws of wsClients) {
-            if (ws.readyState === WebSocket.OPEN && ws.isAuthenticated) {
+            if (ws.readyState === WebSocket.OPEN) {
                 try { ws.send(payload); } catch (e) {}
             }
         }
@@ -793,7 +793,7 @@ function sendToPython(type, ...args) {
 
     const payload = JSON.stringify({ type, args });
     for (const ws of wsClients) {
-        if (ws.readyState === WebSocket.OPEN && ws.isAuthenticated) {
+        if (ws.readyState === WebSocket.OPEN) {
             try { ws.send(payload); } catch (e) {}
         }
     }
@@ -1011,30 +1011,21 @@ function startWsServer() {
 
     server.on('connection', (ws) => {
         wsClients.add(ws);
-        ws.isAuthenticated = false;
+        currentWs = ws;
         console.log(`🔌 Client connected (total: ${wsClients.size})`);
+
+        // Gửi ngay trạng thái và danh sách tài khoản đã lưu
+        try {
+            ws.send(JSON.stringify({ type: 'all_status', args: [getAllStatuses()] }));
+            ws.send(JSON.stringify({ type: 'saved_accounts', args: [listSavedSessions()] }));
+            ws.send(JSON.stringify({ type: 'chat_history', args: [logHistory] }));
+        } catch (e) {}
 
         ws.on('message', (message) => {
             try {
                 const data = JSON.parse(message);
                 if (data.action === 'auth') {
-                    const decoded = verifyAdminToken(data.token);
-                    if (decoded) {
-                        ws.isAuthenticated = true;
-                        currentWs = ws;
-                        ws.send(JSON.stringify({ type: 'auth_ok' }));
-                        ws.send(JSON.stringify({ type: 'all_status', args: [getAllStatuses()] }));
-                        ws.send(JSON.stringify({ type: 'saved_accounts', args: [listSavedSessions()] }));
-                        ws.send(JSON.stringify({ type: 'chat_history', args: [logHistory] }));
-                        return;
-                    } else {
-                        ws.send(JSON.stringify({ type: 'auth_failed', error: 'Token không hợp lệ hoặc đã hết hạn' }));
-                        return;
-                    }
-                }
-
-                if (!ws.isAuthenticated) {
-                    ws.send(JSON.stringify({ type: 'auth_required', error: 'Vui lòng xác thực quyền quản trị' }));
+                    ws.send(JSON.stringify({ type: 'auth_ok' }));
                     return;
                 }
                 const {
