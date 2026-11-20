@@ -1469,6 +1469,10 @@
       if (chatInp) {
         chatInp.placeholder = `[${selectedBot}] CHAT (gửi tin nhắn / lệnh trong game: /login, /home, /vs...)`;
       }
+      const iconEl = document.getElementById('botDropdownIcon');
+      const labelEl = document.getElementById('botDropdownLabel');
+      if (iconEl) iconEl.innerText = '🤖';
+      if (labelEl) labelEl.innerText = selectedBot;
     }
 
     initWs();
