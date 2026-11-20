@@ -642,8 +642,33 @@ function sendBotCommand(username, command, data) {
 }
 
 const wsClients = new Set();
-const MAX_HISTORY_LOGS = 600;
-const logHistory = [];
+const MAX_HISTORY_LOGS = 500;
+const CHAT_HISTORY_FILE = path.join(__dirname, '_chat_history.json');
+let logHistory = [];
+
+try {
+    if (fs.existsSync(CHAT_HISTORY_FILE)) {
+        logHistory = JSON.parse(fs.readFileSync(CHAT_HISTORY_FILE, 'utf-8'));
+        if (!Array.isArray(logHistory)) logHistory = [];
+        if (logHistory.length > MAX_HISTORY_LOGS) {
+            logHistory = logHistory.slice(-MAX_HISTORY_LOGS);
+        }
+    }
+} catch (e) {
+    logHistory = [];
+}
+
+let saveChatTimer = null;
+function persistChatHistory() {
+    if (!saveChatTimer) {
+        saveChatTimer = setTimeout(() => {
+            saveChatTimer = null;
+            try {
+                fs.writeFileSync(CHAT_HISTORY_FILE, JSON.stringify(logHistory.slice(-MAX_HISTORY_LOGS)), 'utf-8');
+            } catch (e) {}
+        }, 3000);
+    }
+}
 
 function addLogHistory(msg, color) {
     const now = new Date();
@@ -652,6 +677,7 @@ function addLogHistory(msg, color) {
     if (logHistory.length > MAX_HISTORY_LOGS) {
         logHistory.shift();
     }
+    persistChatHistory();
 }
 
 let logBatchQueue = [];
@@ -1129,6 +1155,7 @@ function startWsServer() {
 
                     case 'clear_chat':
                         logHistory.length = 0;
+                        try { if (fs.existsSync(CHAT_HISTORY_FILE)) fs.unlinkSync(CHAT_HISTORY_FILE); } catch (e) {}
                         sendToPython('chat_cleared');
                         break;
 

@@ -587,21 +587,8 @@
       } catch (e) {}
     }
 
-    function getLocalChat() {
-      try {
-        const raw = localStorage.getItem('mc_local_chat_history');
-        return raw ? JSON.parse(raw) : [];
-      } catch (e) {
-        return [];
-      }
-    }
-
-    function saveLocalChat(history) {
-      try {
-        const recent = (history || []).slice(-300);
-        localStorage.setItem('mc_local_chat_history', JSON.stringify(recent));
-      } catch (e) {}
-    }
+    // Remove any legacy local chat to free 100% client storage/RAM
+    try { localStorage.removeItem('mc_local_chat_history'); } catch (e) {}
 
     function getLocalAccounts() {
       try {
@@ -924,7 +911,7 @@
           allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
         }
         renderChatHistory(allChatHistory);
-        saveLocalChat(allChatHistory);
+        // client RAM zero bloat
       } else if (type === 'chat_cleared') {
         allChatHistory = [];
         document.getElementById('chatBody').innerHTML = '';
@@ -1718,11 +1705,7 @@
     }
 
     // ── INITIALIZATION & PREFERENCES RESTORATION ──
-    // Load local chat history immediately so chat NEVER flashes empty
-    allChatHistory = getLocalChat();
-    if (allChatHistory.length > 0) {
-      renderChatHistory(allChatHistory);
-    }
+    // Server holds chat history (capped at 500 lines); client holds 0 in storage
     const initAccs = getLocalAccounts();
     const initDelSet = getDeletedAccounts();
     for (const [name, acc] of Object.entries(initAccs)) {
