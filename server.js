@@ -172,9 +172,21 @@ function startBot(username, password, opts = {}) {
         return;
     }
 
-    const effectiveSettings = normalizeSettings(
-        settings || (bots[username] && bots[username].settings) || {}
-    );
+    let session = loadSession(username);
+    if (!session) {
+        session = createSession(username);
+    }
+    const sessionSettings = (session && session.settings) || {};
+    const existingBotSettings = (bots[username] && bots[username].settings) || {};
+
+    const effectiveSettings = normalizeSettings({
+        ...sessionSettings,
+        ...existingBotSettings,
+        ...(settings || {})
+    });
+    if ((!settings || settings.proxy === undefined || settings.proxy === null) && sessionSettings.proxy) {
+        effectiveSettings.proxy = sessionSettings.proxy;
+    }
     if (autoStartStorage) effectiveSettings.storage_autostart_on_join = true;
 
     if (!isAutoRestart) {
@@ -187,11 +199,6 @@ function startBot(username, password, opts = {}) {
     }
 
     sendToPython('log', `[${username}] 🚀 Đang khởi động...`, '#2ecc71');
-
-    let session = loadSession(username);
-    if (!session) {
-        session = createSession(username);
-    }
 
     const botProcess = spawn('node', ['--no-deprecation', path.join(__dirname, 'worker.js'), username, password, JSON.stringify(session)], {
         cwd: __dirname,
