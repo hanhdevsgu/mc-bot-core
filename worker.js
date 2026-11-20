@@ -935,31 +935,139 @@ class BotInstance {
         return nearest;
     }
 
+    _getHasteLevel() {
+        if (!this.bot || !this.bot.entity || !this.bot.entity.effects) return 0;
+        const effects = this.bot.entity.effects;
+        const effectList = Array.isArray(effects) ? effects : Object.values(effects);
+        for (const eff of effectList) {
+            if (!eff) continue;
+            let effName = '';
+            if (this.mcData && this.mcData.effects && this.mcData.effects[eff.id]) {
+                effName = (this.mcData.effects[eff.id].name || '').toLowerCase();
+            }
+            if (eff.name) {
+                effName = eff.name.toLowerCase();
+            }
+            // Haste / fast_digging trong Minecraft (id = 2 trong 1.20+, hoặc id = 3 trong các bản cũ)
+            if (effName === 'haste' || effName === 'fast_digging' || eff.id === 2 || eff.id === 3) {
+                const amp = typeof eff.amplifier === 'number' ? eff.amplifier : 0;
+                return amp + 1; // Haste 1 = amp 0 -> 1; Haste 2 = amp 1 -> 2
+            }
+        }
+        return 0;
+    }
+
+    _ensureWeaponHeld() {
+        if (!this.bot || !this.bot.inventory) return null;
+        let held = this.bot.heldItem;
+        if (!held && typeof this.bot.quickBarSlot === 'number') {
+            held = this.bot.inventory.slots[36 + this.bot.quickBarSlot];
+        }
+        const isWeapon = (item) => {
+            if (!item || !item.name) return false;
+            const n = item.name.toLowerCase();
+            return n.includes('sword') || n.includes('axe') || n.includes('trident');
+        };
+        if (isWeapon(held)) return held;
+
+        // Tự động tìm Kiếm hoặc Rìu trên hotbar (slots 36-44) nếu đang cầm tay không
+        for (let slot = 36; slot <= 44; slot++) {
+            const item = this.bot.inventory.slots[slot];
+            if (item && item.name && (item.name.toLowerCase().includes('sword') || item.name.toLowerCase().includes('kiem'))) {
+                try { this.bot.setQuickBarSlot(slot - 36); } catch (e) {}
+                return item;
+            }
+        }
+        for (let slot = 36; slot <= 44; slot++) {
+            const item = this.bot.inventory.slots[slot];
+            if (item && item.name && (item.name.toLowerCase().includes('axe') || item.name.toLowerCase().includes('riu'))) {
+                try { this.bot.setQuickBarSlot(slot - 36); } catch (e) {}
+                return item;
+            }
+        }
+        return held;
+    }
+
     _getWeaponCooldownSec() {
-        if (!this.bot || !this.bot.heldItem) return 0.625;
-        const name = (this.bot.heldItem.name || '').toLowerCase();
+        let held = this._ensureWeaponHeld();
+        if (!held && this.bot) {
+            held = this.bot.heldItem;
+            if (!held && this.bot.inventory && typeof this.bot.quickBarSlot === 'number') {
+                held = this.bot.inventory.slots[36 + this.bot.quickBarSlot];
+            }
+        }
+        const name = (held && held.name ? held.name : '').toLowerCase();
+
+        // 1. Tốc độ đánh gốc (Base Attack Speed - số đòn mỗi giây theo Minecraft 1.9+):
+        let baseAttackSpeed = 1.6;
         if (name.includes('sword') || name.includes('kiem')) {
-            // Kiếm (Diamond, Netherite, Iron, Gold, Stone, Wood): Tốc độ 1.6 đòn/s -> Hồi đầy 100% sau 1 / 1.6 = 0.625s
-            return 0.625;
+            baseAttackSpeed = 1.6; // Tất cả kiếm: 1.6 đòn/s -> cooldown 0.625s
+        } else if (name.includes('axe') || name.includes('riu')) {
+            if (name.includes('stone') || name.includes('da') || name.includes('wood') || name.includes('go')) {
+                baseAttackSpeed = 0.8; // Rìu đá, rìu gỗ: 0.8 đòn/s -> 1.25s
+            } else if (name.includes('iron') || name.includes('sat')) {
+                baseAttackSpeed = 0.9; // Rìu sắt: 0.9 đòn/s -> 1.11s
+            } else {
+                baseAttackSpeed = 1.0; // Rìu kim cương / Netherite: 1.0 đòn/s -> 1.00s
+            }
+        } else if (name.includes('trident') || name.includes('dinh_ba')) {
+            baseAttackSpeed = 1.1; // Đinh ba: 1.1 đòn/s -> 0.91s
+        } else if (name.includes('pickaxe') || name.includes('cuoc')) {
+            baseAttackSpeed = 1.2; // Cúp: 1.2 đòn/s -> 0.833s
+        } else if (name.includes('shovel') || name.includes('xeng')) {
+            baseAttackSpeed = 1.0; // Xẻng: 1.0 đòn/s -> 1.00s
+        } else {
+            baseAttackSpeed = 1.6; // Mặc định: 1.6 đòn/s -> 0.625s
         }
-        if (name.includes('axe') || name.includes('riu')) {
-            // Rìu (Diamond/Netherite: 1.0 đòn/s -> 1.0s; Sắt: 0.9 -> 1.11s; Đá/Gỗ: 0.8 -> 1.25s)
-            if (name.includes('stone') || name.includes('da') || name.includes('wood') || name.includes('go')) return 1.25;
-            if (name.includes('iron') || name.includes('sat')) return 1.11;
-            return 1.0;
+
+        // 2. Hiệu ứng Đào nhanh (Haste): mỗi cấp tăng 10% tốc độ đánh
+        const hasteLevel = this._getHasteLevel();
+        let effectiveAttackSpeed = baseAttackSpeed;
+        if (hasteLevel > 0) {
+            effectiveAttackSpeed = baseAttackSpeed * (1.0 + 0.1 * hasteLevel);
         }
-        if (name.includes('trident') || name.includes('dinh_ba')) return 0.91;
-        if (name.includes('shovel') || name.includes('xeng')) return 1.0;
-        if (name.includes('pickaxe') || name.includes('cuoc')) return 0.833;
-        return 0.625;
+
+        // 3. Thời gian hồi đầy 100% cây đòn đánh (cooldownSec) = 1.0 / effectiveAttackSpeed
+        return 1.0 / effectiveAttackSpeed;
+    }
+
+    autoTuneWeaponCombatCooldown(force = false) {
+        if (!this.bot || !this.joined_server) return;
+        if (this._userCustomizedDelay && !force) return;
+
+        const held = this._ensureWeaponHeld();
+        const weaponName = held ? (held.displayName || held.name || 'Vũ khí') : 'Kiếm';
+        const cooldownSec = this._getWeaponCooldownSec();
+        const hasteLevel = this._getHasteLevel();
+        const hasteStr = hasteLevel > 0 ? ` + Đào nhanh ${hasteLevel}` : '';
+
+        // Căn chỉnh khoảng delay tối ưu 100% Max Dame:
+        // optMin = cooldownSec + 0.01s (đảm bảo server 100% hồi đầy cây đòn)
+        // optMax = optMin + 0.07s (jitter tự nhiên)
+        const optMin = Math.round((cooldownSec + 0.01) * 100) / 100;
+        const optMax = Math.round((optMin + 0.07) * 100) / 100;
+
+        if (Math.abs(this.farm_min_delay - optMin) > 0.02 || Math.abs(this.farm_max_delay - optMax) > 0.02) {
+            this.farm_min_delay = optMin;
+            this.farm_max_delay = optMax;
+            if (this.settings) {
+                this.settings.farm_min_delay = optMin;
+                this.settings.farm_max_delay = optMax;
+            }
+            this.sendStatus();
+            this.log(`⚔️ [Auto Combat] Nhận diện: ${weaponName}${hasteStr} -> Tự động điền Delay 100% Max Dame: ${optMin}s - ${optMax}s`, '#2ecc71');
+        }
     }
 
     _calculateNextAttackDelay() {
         const weaponCooldown = this._getWeaponCooldownSec();
-        // Luôn đảm bảo thời gian chờ đòn sau tối thiểu bằng thời gian nạp đầy cooldown của vũ khí
-        // để 100% lần ra đòn đều đạt Max Damage (kích hoạt chém quét Sweep và sát thương tối đa)
-        const effectiveMin = Math.max(this.farm_min_delay, weaponCooldown);
-        const effectiveMax = Math.max(this.farm_max_delay, effectiveMin + 0.1);
+        // Luôn bảo vệ: effectiveMin không bao giờ nhỏ hơn weaponCooldown
+        // để 100% đòn đánh đều hồi đầy thanh, đạt sát thương cực đại và kích hoạt chém quét (Sweep)
+        const userMin = (this.farm_min_delay && this.farm_min_delay > 0) ? this.farm_min_delay : (weaponCooldown + 0.01);
+        const userMax = (this.farm_max_delay && this.farm_max_delay >= userMin) ? this.farm_max_delay : (userMin + 0.07);
+
+        const effectiveMin = Math.max(userMin, weaponCooldown + 0.005);
+        const effectiveMax = Math.max(userMax, effectiveMin + 0.05);
         return effectiveMin + Math.random() * (effectiveMax - effectiveMin);
     }
 
@@ -1034,6 +1142,12 @@ class BotInstance {
             const expectConfirm = (sentNow - prevSentAt) >= this._invulnWindowMs;
             this._lastAttackSentAt.set(attackTargetId, sentNow);
 
+            // Tắt chạy nhanh (sprint) khi chém để 100% kích hoạt Quét Cạnh (Sweep Attack) khi cầm kiếm
+            if (this.bot && this.bot.setControlState) {
+                this.bot.setControlState('sprint', false);
+            }
+
+            const prevDelay = this.next_attack_delay;
             this.bot.attack(attackTarget);
             this._lastAttackTargetId = attackTargetId;
             this._pendingAttacks.set(attackTargetId, { sentAt: sentNow, expectConfirm });
@@ -1042,13 +1156,14 @@ class BotInstance {
             this._missCount = 0;
 
             const targetName = attackTarget.displayName || attackTarget.name || 'quái';
-            const heldItem = this.bot.heldItem;
-            const weaponName = heldItem ? (heldItem.displayName || heldItem.name || 'Vũ khí') : 'Tay không';
-            const weaponCooldown = this._getWeaponCooldownSec();
-            const isFullDamage = this.next_attack_delay >= weaponCooldown;
-            const dameTag = isFullDamage ? '100% MAX Dame' : 'Dame giảm';
+            const heldItem = this._ensureWeaponHeld() || this.bot.heldItem;
+            const weaponName = heldItem ? (heldItem.displayName || heldItem.name || 'Vũ khí') : 'Kiếm';
+            const hasteLevel = this._getHasteLevel();
+            const hasteTag = hasteLevel > 0 ? ` [Đào nhanh ${hasteLevel}]` : '';
+            const isSword = weaponName.toLowerCase().includes('sword') || weaponName.toLowerCase().includes('kiem');
+            const sweepTag = isSword ? ' + Quét Cạnh' : '';
 
-            this.log(`⚔️ [Farm] Chém: ${targetName} (kc: ${finalDist.toFixed(1)}m, delay: ${this.next_attack_delay.toFixed(2)}s, vũ khí: ${weaponName} - ${dameTag})`, '#58a6ff');
+            this.log(`⚔️ [Farm] Chém: ${targetName} (kc: ${finalDist.toFixed(1)}m, delay: ${prevDelay.toFixed(2)}s, ${weaponName}${hasteTag} - 100% Max Dame${sweepTag})`, '#58a6ff');
 
             if (this.farm_debug) {
                 this.log(`⚔️ [debug] Chi tiết: ${attackTarget.name || '?'} (id=${attackTargetId}) dist=${finalDist.toFixed(2)} ping=${(latency * 1000).toFixed(0)}ms margin=${this._adaptiveReachMargin.toFixed(2)} cd=${weaponCooldown.toFixed(3)}s${expectConfirm ? '' : ' (invuln-window)'}`, '#8b949e');
@@ -1094,8 +1209,8 @@ class BotInstance {
                 if (this._pendingAttacks.size > 0) {
                     const nowMs = Date.now();
                     const pingMs = Math.round(this._getLatencySec() * 1000);
-                    // Dynamic timeout: tối thiểu 1200ms, cộng thêm 2.5x RTT qua proxy để tránh false timeout khi lag mạng
-                    this._missTimeoutMs = Math.max(1200, Math.round(this._getLatencySec() * 2500 + 800));
+                    // Dynamic timeout: tối thiểu 1600ms, cộng thêm 3x RTT qua proxy để tránh false timeout khi lag mạng
+                    this._missTimeoutMs = Math.max(1600, Math.round(this._getLatencySec() * 3000 + 1000));
 
                     for (const [id, info] of this._pendingAttacks) {
                         if (nowMs - info.sentAt > this._missTimeoutMs) {
@@ -1115,7 +1230,7 @@ class BotInstance {
                             // CHỈ TĂNG REACH MARGIN NẾU KHOẢNG CÁCH GẦN NGƯỠNG TẦM ĐÁNH (>= 2.5m).
                             // Nếu mob ở cự ly gần (< 2.5m, vd: 0.8m trong farm), nguyên nhân hụt KHÔNG BAO GIỜ là tầm với,
                             // tuyệt đối không được thổi phồng margin!
-                            if (curDist >= (this.ATTACK_REACH - 0.5)) {
+                            if (curDist >= (this.ATTACK_REACH - 0.5) && curDist >= 2.5) {
                                 this._adaptiveReachMargin = Math.min(this._adaptiveMarginMax, this._adaptiveReachMargin + this._adaptiveMarginStep);
                             }
 
@@ -1803,8 +1918,14 @@ class BotInstance {
     updateSettings(settings) {
         if (settings.farm_range !== undefined) this.farm_range = settings.farm_range;
         if (settings.farm_radius !== undefined) this.farm_radius = settings.farm_radius;
-        if (settings.farm_min_delay !== undefined) this.farm_min_delay = settings.farm_min_delay;
-        if (settings.farm_max_delay !== undefined) this.farm_max_delay = settings.farm_max_delay;
+        if (settings.farm_min_delay !== undefined) {
+            this.farm_min_delay = settings.farm_min_delay;
+            this._userCustomizedDelay = true;
+        }
+        if (settings.farm_max_delay !== undefined) {
+            this.farm_max_delay = settings.farm_max_delay;
+            this._userCustomizedDelay = true;
+        }
         if (settings.farm_smart_aim !== undefined) this.farm_smart_aim = settings.farm_smart_aim;
         if (settings.farm_lookat !== undefined) this.farm_lookat = settings.farm_lookat;
         if (settings.farm_debug !== undefined) this.farm_debug = settings.farm_debug;
@@ -1851,10 +1972,6 @@ class BotInstance {
             } else {
                 this.stopPitchYawLockLoop();
             }
-        }
-
-        if (this.farm_debug) {
-            this.log(`⚙️ [debug] Cập nhật settings`, '#4a9eff');
         }
 
         if (this.running && this.joined_server) {
@@ -2587,6 +2704,8 @@ class BotInstance {
         setTimeout(() => this.sendHeldItem(), 300);
         setTimeout(() => this.sendHeldItem(), 800);
         setTimeout(() => this.sendHeldItem(), 1800);
+        setTimeout(() => this.autoTuneWeaponCombatCooldown(), 600);
+        setTimeout(() => this.autoTuneWeaponCombatCooldown(), 1800);
 
         if (this.afk_persist && !this.anti_afk_running) {
             setTimeout(() => this.startAntiAfk(), 1000);

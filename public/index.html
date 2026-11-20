@@ -349,24 +349,14 @@
             <input type="number" step="0.1" id="cfgFarmRadius" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-slate-100 w-24 text-right">
           </div>
           <div class="flex items-center justify-between">
-            <label class="text-slate-400">Tốc độ:</label>
-            <select id="cfgSpeedPreset" onchange="onSpeedPresetChange(this.value)" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-slate-100 text-xs">
-              <option value="⚔️ Kiếm Max Dame (0.63 - 0.80s)">⚔️ Kiếm Max Dame (0.63 - 0.80s)</option>
-              <option value="🪓 Rìu Max Dame (1.00 - 1.25s)">🪓 Rìu Max Dame (1.00 - 1.25s)</option>
-              <option value="⚡ Tốc độ cao (0.50 - 0.80s)">⚡ Tốc độ cao (0.50 - 0.80s)</option>
-              <option value="🐢 Chậm an toàn (1.20 - 1.60s)">🐢 Chậm an toàn (1.20 - 1.60s)</option>
-              <option value="Tùy chỉnh">Tùy chỉnh</option>
-            </select>
-          </div>
-          <div class="flex items-center justify-between">
-            <label class="text-slate-400">Delay min/max (s):</label>
+            <label class="text-slate-400">Delay farm min/max (s):</label>
             <div class="flex items-center gap-1.5">
-              <input type="number" step="0.01" id="cfgFarmMinDelay" class="bg-[#141622] border border-[#202436] rounded px-2 py-1 text-slate-100 w-16 text-center text-xs">
+              <input type="number" step="0.01" id="cfgFarmMinDelay" placeholder="0.63" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-emerald-400 font-bold w-20 text-center text-xs">
               <span class="text-slate-600">→</span>
-              <input type="number" step="0.01" id="cfgFarmMaxDelay" class="bg-[#141622] border border-[#202436] rounded px-2 py-1 text-slate-100 w-16 text-center text-xs">
+              <input type="number" step="0.01" id="cfgFarmMaxDelay" placeholder="0.70" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-emerald-400 font-bold w-20 text-center text-xs">
             </div>
           </div>
-          <p class="text-[11px] text-emerald-400 font-medium">✨ Auto Cooldown: Cầm Kiếm tự lock delay ≥0.625s, Cầm Rìu tự lock delay ≥1.0s (100% Full Max Dame & Sweep!)</p>
+          <p class="text-[11px] text-emerald-400 font-medium">✨ Khi vào server: Bot tự nhận diện Kiếm / Rìu & Hiệu ứng Đào nhanh để tự điền min/max chuẩn 100% Max Dame & Quét Cạnh. Bạn có thể chỉnh lại bất kỳ lúc nào.</p>
           <div class="flex items-center justify-between">
             <label class="text-slate-400">Chế độ đánh:</label>
             <select id="cfgAttackMode" class="bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-slate-100">
@@ -550,13 +540,6 @@
 
   <!-- ── APPLICATION JAVASCRIPT ── -->
   <script>
-    const FARM_PRESETS = {
-      "⚔️ Kiếm Max Dame (0.63 - 0.80s)": [0.63, 0.80],
-      "🪓 Rìu Max Dame (1.00 - 1.25s)": [1.00, 1.25],
-      "⚡ Tốc độ cao (0.50 - 0.80s)": [0.50, 0.80],
-      "🐢 Chậm an toàn (1.20 - 1.60s)": [1.20, 1.60]
-    };
-
     const MC_COLORS = {
       '0': '#000000',
       '1': '#0000aa',
@@ -968,26 +951,6 @@
                   action: 'update_password',
                   username: uname,
                   password: loc.password
-                }));
-              }
-            }
-
-            // Chỉ gửi cập nhật nếu server thật sự thiếu thông tin proxy user/pass (tránh lặp vô hạn)
-            const locUser = locProxy.user || locProxy.username || '';
-            const locPass = locProxy.pass || locProxy.password || '';
-            const srvUser = srvProxy.user || srvProxy.username || '';
-            const srvPass = srvProxy.pass || srvProxy.password || '';
-            if ((locUser && !srvUser) || (locPass && !srvPass)) {
-              const mergedProxy = Object.assign({}, srvProxy, locProxy, {
-                user: locUser, username: locUser,
-                pass: locPass, password: locPass
-              });
-              const mergedSettings = Object.assign({}, srv.settings || {}, loc.settings || {}, { proxy: mergedProxy });
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  action: 'update_settings',
-                  username: uname,
-                  ...mergedSettings
                 }));
               }
             }
@@ -1913,18 +1876,9 @@
       document.getElementById('cfgFarmRadius').value = s.farm_radius !== undefined ? s.farm_radius : 20.0;
 
       const minD = s.farm_min_delay !== undefined ? s.farm_min_delay : 0.63;
-      const maxD = s.farm_max_delay !== undefined ? s.farm_max_delay : 0.80;
+      const maxD = s.farm_max_delay !== undefined ? s.farm_max_delay : 0.70;
       document.getElementById('cfgFarmMinDelay').value = minD;
       document.getElementById('cfgFarmMaxDelay').value = maxD;
-
-      let matchedPreset = 'Tùy chỉnh';
-      for (const [k, [mn, mx]] of Object.entries(FARM_PRESETS)) {
-        if (Math.abs(minD - mn) < 0.01 && Math.abs(maxD - mx) < 0.01) {
-          matchedPreset = k;
-          break;
-        }
-      }
-      document.getElementById('cfgSpeedPreset').value = matchedPreset;
 
       document.getElementById('cfgAttackMode').value = s.farm_smart_aim ? 'Smart Aim (Logic mới)' : 'Logic cũ';
       document.getElementById('cfgFarmLookat').checked = s.farm_lookat !== undefined ? s.farm_lookat : true;
@@ -1965,14 +1919,6 @@
     function closeSettingsModal() {
       document.getElementById('settingsModal').classList.add('hidden');
       currentModalBot = null;
-    }
-
-    function onSpeedPresetChange(preset) {
-      if (FARM_PRESETS[preset]) {
-        const [mn, mx] = FARM_PRESETS[preset];
-        document.getElementById('cfgFarmMinDelay').value = mn;
-        document.getElementById('cfgFarmMaxDelay').value = mx;
-      }
     }
 
     function togglePitchYawFields(enable) {
@@ -2033,8 +1979,8 @@
       const newSettings = {
         farm_range: parseFloat(document.getElementById('cfgFarmRange').value) || 2.9,
         farm_radius: parseFloat(document.getElementById('cfgFarmRadius').value) || 20.0,
-        farm_min_delay: parseFloat(document.getElementById('cfgFarmMinDelay').value) || 0.5,
-        farm_max_delay: parseFloat(document.getElementById('cfgFarmMaxDelay').value) || 0.8,
+        farm_min_delay: parseFloat(document.getElementById('cfgFarmMinDelay').value) || 0.63,
+        farm_max_delay: parseFloat(document.getElementById('cfgFarmMaxDelay').value) || 0.70,
         farm_smart_aim: document.getElementById('cfgAttackMode').value.includes('Smart Aim'),
         farm_lookat: document.getElementById('cfgFarmLookat').checked,
         afk_persist: document.getElementById('cfgAfkPersist').checked,

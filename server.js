@@ -239,8 +239,8 @@ function saveRunningState() {
 const DEFAULT_BOT_SETTINGS = {
     farm_range: 4,
     farm_radius: 20,
-    farm_min_delay: 0.5,
-    farm_max_delay: 0.8,
+    farm_min_delay: 0.63,
+    farm_max_delay: 0.70,
 
     farm_smart_aim: false,
     farm_lookat: true,
