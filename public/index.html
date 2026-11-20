@@ -834,10 +834,10 @@
       </div>
       <div class="header-filters">
         <label class="chk-label">
-          <input type="checkbox" id="chkHideDebug"> Ẩn debug
+          <input type="checkbox" id="chkHideDebug" onchange="renderChatHistory()"> Ẩn debug
         </label>
         <label class="chk-label">
-          <input type="checkbox" id="chkHideChat"> Ẩn chat
+          <input type="checkbox" id="chkHideChat" onchange="renderChatHistory()"> Ẩn chat
         </label>
       </div>
     </div>
@@ -1189,9 +1189,92 @@
 
     // ── HIGH-PERFORMANCE 60FPS DOM BATCH LOGGING (NO LAG) ──
     const MAX_DOM_LINES = 500;
+    let allChatHistory = [];
     let logQueue = [];
     let renderTimer = null;
     let renderBotsScheduled = false;
+
+    // ── MINECRAFT 1.12.2 COLOR & FORMATTING PALETTE ──
+    const MC_COLORS = {
+      '0': '#475569', // Dark / Black (adjusted for obsidian dark bg visibility)
+      '1': '#1d4ed8', // Dark Blue
+      '2': '#15803d', // Dark Green
+      '3': '#0891b2', // Dark Aqua
+      '4': '#b91c1c', // Dark Red
+      '5': '#7e22ce', // Dark Purple
+      '6': '#d97706', // Gold
+      '7': '#94a3b8', // Gray
+      '8': '#64748b', // Dark Gray
+      '9': '#3b82f6', // Blue
+      'a': '#22c55e', // Green
+      'b': '#06b6d4', // Aqua
+      'c': '#ef4444', // Red
+      'd': '#ec4899', // Light Purple
+      'e': '#eab308', // Yellow
+      'f': '#f8fafc', // White
+      'g': '#facc15'  // Mine Gold / Bedrock
+    };
+
+    function escapeHtml(s) {
+      return (s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatMinecraftColors(text, defaultColor = '#f1f5f9') {
+      if (!text) return '';
+      if (!text.includes('§')) {
+        return `<span style="color:${defaultColor};">${escapeHtml(text)}</span>`;
+      }
+
+      let html = '';
+      let currentColor = defaultColor;
+      let isBold = false;
+      let isItalic = false;
+      let isUnderline = false;
+      let isStrike = false;
+
+      const parts = text.split(/(§[0-9a-gk-or])/gi);
+      for (const part of parts) {
+        if (!part) continue;
+        if (part.startsWith('§') && part.length === 2) {
+          const code = part[1].toLowerCase();
+          if (MC_COLORS[code] !== undefined) {
+            currentColor = MC_COLORS[code];
+            isBold = false;
+            isItalic = false;
+            isUnderline = false;
+            isStrike = false;
+          } else if (code === 'l') {
+            isBold = true;
+          } else if (code === 'o') {
+            isItalic = true;
+          } else if (code === 'n') {
+            isUnderline = true;
+          } else if (code === 'm') {
+            isStrike = true;
+          } else if (code === 'r') {
+            currentColor = defaultColor;
+            isBold = false;
+            isItalic = false;
+            isUnderline = false;
+            isStrike = false;
+          }
+        } else {
+          let style = `color:${currentColor};`;
+          if (isBold) style += 'font-weight:700;';
+          if (isItalic) style += 'font-style:italic;';
+          const dec = [];
+          if (isUnderline) dec.push('underline');
+          if (isStrike) dec.push('line-through');
+          if (dec.length) style += `text-decoration:${dec.join(' ')};`;
+          html += `<span style="${style}">${escapeHtml(part)}</span>`;
+        }
+      }
+      return html;
+    }
 
     function initWs() {
       const isHttps = location.protocol === 'https:';
@@ -1251,11 +1334,18 @@
       } else if (type === 'log') {
         const msg = args[0] || '';
         const color = args[1] || '#94a3b8';
-        appendLog(null, msg, color);
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        allChatHistory.push({ time: timeStr, msg, color });
+        if (allChatHistory.length > MAX_DOM_LINES * 2) {
+          allChatHistory.shift();
+        }
+        appendLog(null, msg, color, timeStr);
       } else if (type === 'chat_history') {
-        const history = args[0] || [];
-        renderChatHistory(history);
+        allChatHistory = (args[0] || []).slice();
+        renderChatHistory(allChatHistory);
       } else if (type === 'chat_cleared') {
+        allChatHistory = [];
         document.getElementById('chatBody').innerHTML = '';
       } else if (type === 'ip') {
         const [username, ip] = args;
@@ -1287,12 +1377,19 @@
       }
     }
 
-    function appendLog(tag, msg, color, timestamp) {
-      const isDebug = msg.toLowerCase().includes('debug') || msg.includes('📐') || msg.includes('🎯');
-      const isPlayerChat = msg.includes('<') && msg.includes('>');
+    function isMsgHidden(msg) {
+      if (!msg) return false;
+      const isDebugPrefix = msg.includes('📂') || msg.includes('🐞') || msg.includes('🧪') || msg.includes('📕') || msg.includes('🔄') || msg.includes('🖱️') || msg.includes('📦') || msg.includes('📏') || msg.includes('📐') || msg.includes('ℹ️');
+      const isDebug = isDebugPrefix || msg.toLowerCase().includes('debug');
+      const isPlayerChat = msg.includes('§') || (msg.includes('<') && msg.includes('>'));
 
-      if (document.getElementById('chkHideDebug').checked && isDebug) return;
-      if (document.getElementById('chkHideChat').checked && isPlayerChat) return;
+      if (document.getElementById('chkHideDebug').checked && isDebug) return true;
+      if (document.getElementById('chkHideChat').checked && isPlayerChat) return true;
+      return false;
+    }
+
+    function appendLog(tag, msg, color, timestamp) {
+      if (isMsgHidden(msg)) return;
 
       const now = new Date();
       const timeStr = timestamp || `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
@@ -1315,7 +1412,7 @@
         const line = document.createElement('div');
         line.style.display = 'flex';
         line.style.gap = '8px';
-        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.timeStr}</span><span style="color:${item.color}; flex:1; word-break:break-word;">${escapeHtml(item.msg)}</span>`;
+        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.timeStr}</span><span style="flex:1; word-break:break-word;">${formatMinecraftColors(item.msg, item.color)}</span>`;
         frag.appendChild(line);
       }
       logQueue = [];
@@ -1331,13 +1428,15 @@
       const body = document.getElementById('chatBody');
       body.innerHTML = '';
       const frag = document.createDocumentFragment();
-      const recent = history.slice(-MAX_DOM_LINES);
+      const list = history || allChatHistory;
+      const visible = list.filter(item => !isMsgHidden(item.msg));
+      const recent = visible.slice(-MAX_DOM_LINES);
 
       for (const item of recent) {
         const line = document.createElement('div');
         line.style.display = 'flex';
         line.style.gap = '8px';
-        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.time || ''}</span><span style="color:${item.color || '#f1f5f9'}; flex:1; word-break:break-word;">${escapeHtml(item.msg)}</span>`;
+        line.innerHTML = `<span style="color:#64748b; flex-shrink:0;">${item.time || ''}</span><span style="flex:1; word-break:break-word;">${formatMinecraftColors(item.msg, item.color || '#f1f5f9')}</span>`;
         frag.appendChild(line);
       }
       body.appendChild(frag);
@@ -1345,14 +1444,11 @@
     }
 
     function clearChat() {
+      allChatHistory = [];
       document.getElementById('chatBody').innerHTML = '';
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ action: 'clear_chat' }));
       }
-    }
-
-    function escapeHtml(s) {
-      return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // ── BOT ROSTER RENDERING ──
