@@ -668,19 +668,7 @@
           }
         } catch (e) {}
       }
-
-      // Check if setup is needed
-      try {
-        const res = await fetch('/api/auth/status');
-        const data = await res.json();
-        if (data && data.needsSetup) {
-          showAuthModal('setup');
-        } else {
-          showAuthModal('login');
-        }
-      } catch (e) {
-        showAuthModal('login');
-      }
+      showAuthModal('login');
     }
 
     let currentAuthMode = 'login';
@@ -722,11 +710,14 @@
     async function handleAuthSubmit(e) {
       e.preventDefault();
       const errBox = document.getElementById('authErrorMsg');
+      const btn = document.getElementById('authSubmitBtn');
+      const btnTxt = document.getElementById('authSubmitBtnText');
+      const originalText = btnTxt ? btnTxt.innerText : 'Đăng nhập Quản Trị';
       errBox.classList.add('hidden');
 
       if (currentAuthMode === 'setup') {
-        const pwd = document.getElementById('authSetupPassword').value;
-        const confirm = document.getElementById('authSetupConfirm').value;
+        const pwd = (document.getElementById('authSetupPassword').value || '').trim();
+        const confirm = (document.getElementById('authSetupConfirm').value || '').trim();
         if (!pwd || pwd.length < 4) {
           errBox.innerText = 'Mật khẩu quản trị phải có ít nhất 4 ký tự!';
           errBox.classList.remove('hidden');
@@ -738,6 +729,8 @@
           return;
         }
         try {
+          if (btn) btn.disabled = true;
+          if (btnTxt) btnTxt.innerText = 'Đang thiết lập...';
           const res = await fetch('/api/auth/setup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -747,7 +740,11 @@
           if (data && data.ok && data.token) {
             setAdminToken(data.token);
             hideAuthModal();
-            initWs();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ action: 'auth', token: data.token }));
+            } else {
+              initWs();
+            }
           } else {
             errBox.innerText = data.error || 'Lỗi thiết lập mật khẩu';
             errBox.classList.remove('hidden');
@@ -755,15 +752,20 @@
         } catch (err) {
           errBox.innerText = 'Lỗi kết nối tới server: ' + err.message;
           errBox.classList.remove('hidden');
+        } finally {
+          if (btn) btn.disabled = false;
+          if (btnTxt) btnTxt.innerText = originalText;
         }
       } else {
-        const pwd = document.getElementById('authLoginPassword').value;
+        const pwd = (document.getElementById('authLoginPassword').value || '').trim();
         if (!pwd) {
           errBox.innerText = 'Vui lòng nhập mật khẩu!';
           errBox.classList.remove('hidden');
           return;
         }
         try {
+          if (btn) btn.disabled = true;
+          if (btnTxt) btnTxt.innerText = 'Đang kiểm tra...';
           const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -773,7 +775,11 @@
           if (data && data.ok && data.token) {
             setAdminToken(data.token);
             hideAuthModal();
-            initWs();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ action: 'auth', token: data.token }));
+            } else {
+              initWs();
+            }
           } else {
             errBox.innerText = data.error || 'Sai mật khẩu!';
             errBox.classList.remove('hidden');
@@ -781,6 +787,9 @@
         } catch (err) {
           errBox.innerText = 'Lỗi kết nối tới server: ' + err.message;
           errBox.classList.remove('hidden');
+        } finally {
+          if (btn) btn.disabled = false;
+          if (btnTxt) btnTxt.innerText = originalText;
         }
       }
     }
@@ -968,9 +977,18 @@
       const { type, args = [] } = data;
 
       if (type === 'auth_ok') {
+        hideAuthModal();
         setTimeout(autoResumeActiveBots, 600);
         return;
-      } else if (type === 'auth_required' || type === 'auth_failed') {
+      } else if (type === 'auth_required') {
+        const token = getAdminToken();
+        if (token && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ action: 'auth', token }));
+        } else {
+          showAuthModal('login');
+        }
+        return;
+      } else if (type === 'auth_failed') {
         setAdminToken('');
         showAuthModal('login');
         return;
