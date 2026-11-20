@@ -14,8 +14,10 @@ import traceback
 import re
 import queue
 from collections import deque
+import ssl
 
-WS_URL = "ws://localhost:54322"
+# Cloud Render 24/7 (hoặc đổi lại "ws://localhost:54322" nếu muốn chạy máy nhà)
+WS_URL = "wss://mc-bot-core.onrender.com"
 MC_SERVER_HOST = '171.244.52.181'
 MC_SERVER_PORT = 54321
 
@@ -340,7 +342,9 @@ class BotManager:
                 on_close=self.on_ws_close,
                 on_error=self.on_ws_error
             )
-            threading.Thread(target=self.ws.run_forever, daemon=True).start()
+            sslopt = {"cert_reqs": ssl.CERT_NONE} if WS_URL.startswith("wss://") else None
+            run_kwargs = {"sslopt": sslopt} if sslopt else {}
+            threading.Thread(target=self.ws.run_forever, kwargs=run_kwargs, daemon=True).start()
         except Exception as e:
             self.add_chat(f"❌ Không kết nối được core server: {e}", '#ef4444')
 
