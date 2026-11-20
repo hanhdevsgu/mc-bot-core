@@ -7,3 +7,7 @@ __pycache__/
 *.pyc
 
 .playwright-mcp/
+
+# Prevent Git from ever touching or overriding user bot sessions & accounts
+sessions/*.json
+sessions/accounts.json
