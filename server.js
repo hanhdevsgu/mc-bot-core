@@ -373,6 +373,9 @@ function startBot(username, password, opts = {}) {
         password: password,
         process: botProcess,
         running: true,
+        retrying: false,
+        retry_attempt: crashRetryCounts[username] || 0,
+        status_text: isAutoRestart ? `Thử lại (${crashRetryCounts[username] || 1})...` : 'Đang khởi động...',
         current_ip: initialProxyIp,
         ip: initialProxyIp,
         anti_afk_running: false,
@@ -386,6 +389,17 @@ function startBot(username, password, opts = {}) {
         settings: effectiveSettings,
     };
     saveRunningState();
+
+    sendToPython('status', username, {
+        running: true,
+        retrying: false,
+        retry_attempt: crashRetryCounts[username] || 0,
+        status_text: bots[username].status_text,
+        anti_afk: false,
+        auto_farm: false,
+        auto_storage: false,
+        current_ip: initialProxyIp
+    });
 
     botProcess.stdout.on('data', (data) => {
         const lines = data.toString().split('\n');
@@ -415,8 +429,18 @@ function startBot(username, password, opts = {}) {
                         });
                     } else if (parsed.type === 'joined') {
                         sendToPython('joined', username);
-
                         crashRetryCounts[username] = 0;
+                        if (bots[username]) {
+                            bots[username].retrying = false;
+                            bots[username].retry_attempt = 0;
+                            bots[username].status_text = 'Đang chạy';
+                            sendToPython('status', username, {
+                                running: true,
+                                retrying: false,
+                                retry_attempt: 0,
+                                status_text: 'Đang chạy'
+                            });
+                        }
                     } else if (parsed.type === 'storage_cycle_complete') {
                         scheduleStorageRestart(username, parsed);
                     } else if (parsed.type === 'expect_guard_kill') {
@@ -464,19 +488,22 @@ function startBot(username, password, opts = {}) {
             botInfo.item = 'Tay không (Trống)';
             saveRunningState();
 
-            sendToPython('status', username, {
-                anti_afk: false,
-                auto_farm: false,
-                auto_storage: false,
-                running: false
-            });
-
             if (botInfo.plannedGuardRestartMs !== null && botInfo.plannedGuardRestartMs !== undefined) {
                 // EXPECT GUARD: đã kill xong → N phút sau tự vào lại, tự bật chuỗi (worker sẽ check EXPECT trước).
                 const waitMs = botInfo.plannedGuardRestartMs;
                 botInfo.plannedGuardRestartMs = null;
                 botInfo.plannedStorageRestart = false;
                 botInfo.settings.storage_autostart_on_join = true;
+                botInfo.retrying = true;
+                botInfo.status_text = `Guard (${Math.round(waitMs / 60000)}p)...`;
+                sendToPython('status', username, {
+                    anti_afk: false,
+                    auto_farm: false,
+                    auto_storage: false,
+                    running: false,
+                    retrying: true,
+                    status_text: botInfo.status_text
+                });
                 sendToPython('log', `[${username}] 🛡️ EXPECT GUARD: ${Math.round(waitMs / 60000)} phút sau sẽ vào lại.`, '#f5c842');
                 scheduleStorageStartAfterDelay(username, waitMs);
             } else if (botInfo.plannedStorageRestart) {
@@ -485,12 +512,37 @@ function startBot(username, password, opts = {}) {
                     + (Number(botInfo.settings.storage_restart_minutes) || 0) * 60000
                     + (Number(botInfo.settings.storage_restart_seconds) || 0) * 1000);
                 botInfo.settings.storage_autostart_on_join = true;
+                botInfo.retrying = true;
+                botInfo.status_text = 'Chờ vào lại...';
+                sendToPython('status', username, {
+                    anti_afk: false,
+                    auto_farm: false,
+                    auto_storage: false,
+                    running: false,
+                    retrying: true,
+                    status_text: botInfo.status_text
+                });
                 scheduleStorageStartAfterDelay(username, totalMs);
             } else if (!botInfo.wasStopped) {
                 crashRetryCounts[username] = (crashRetryCounts[username] || 0) + 1;
                 const attempt = crashRetryCounts[username];
-
                 const delay = Math.min(CRASH_RETRY_BASE_DELAY * attempt, CRASH_RETRY_MAX_DELAY);
+
+                botInfo.retrying = true;
+                botInfo.retry_attempt = attempt;
+                botInfo.retry_delay = delay;
+                botInfo.status_text = `Thử lại (${attempt})...`;
+
+                sendToPython('status', username, {
+                    anti_afk: false,
+                    auto_farm: false,
+                    auto_storage: false,
+                    running: false,
+                    retrying: true,
+                    retry_attempt: attempt,
+                    retry_delay: delay,
+                    status_text: `Thử lại (${attempt})...`
+                });
 
                 sendToPython(
                     'log',
@@ -505,6 +557,19 @@ function startBot(username, password, opts = {}) {
                         startBot(username, botInfo.password, { isAutoRestart: true, settings: botInfo.settings });
                     }
                 }, delay);
+            } else {
+                botInfo.retrying = false;
+                botInfo.retry_attempt = 0;
+                botInfo.status_text = 'Đã dừng';
+                sendToPython('status', username, {
+                    anti_afk: false,
+                    auto_farm: false,
+                    auto_storage: false,
+                    running: false,
+                    retrying: false,
+                    retry_attempt: 0,
+                    status_text: 'Đã dừng'
+                });
             }
         }
 
@@ -692,13 +757,19 @@ function stopBot(username) {
     }
 
     bots[username].running = false;
+    bots[username].retrying = false;
+    bots[username].retry_attempt = 0;
+    bots[username].status_text = 'Đã dừng';
     saveRunningState();
     sendToPython('log', `[${username}] ⏸ Đã dừng`, '#ff4d6d');
     sendToPython('status', username, {
         anti_afk: false,
         auto_farm: false,
         auto_storage: false,
-        running: false
+        running: false,
+        retrying: false,
+        retry_attempt: 0,
+        status_text: 'Đã dừng'
     });
 }
 
@@ -860,6 +931,9 @@ function getAllStatuses() {
         const displayIp = bot.current_ip || (botProxy ? botProxy.host : 'Chưa kết nối');
         statuses[name] = {
             running: bot.running,
+            retrying: !!bot.retrying,
+            retry_attempt: bot.retry_attempt || 0,
+            status_text: bot.status_text || (bot.running ? 'Đang chạy' : (bot.retrying ? `Thử lại (${bot.retry_attempt})` : 'Đã dừng')),
             anti_afk: bot.anti_afk_running,
             auto_farm: bot.auto_farm_running,
             auto_storage: bot.auto_storage_running,

@@ -1052,13 +1052,35 @@
       filtered.forEach(name => {
         const bot = bots[name] || {};
         const isRunning = !!bot.running;
+        const isRetrying = !!bot.retrying;
+        const retryAttempt = bot.retry_attempt || 1;
         const botProxy = (bot.settings && bot.settings.proxy && bot.settings.proxy.enabled !== false && bot.settings.proxy.host)
           ? bot.settings.proxy
           : null;
-        const currentIp = bot.ip || bot.current_ip || (botProxy ? botProxy.host : (isRunning ? 'Đang kết nối...' : 'Chưa kết nối'));
+        let displayIp = bot.ip || bot.current_ip || (botProxy ? botProxy.host : (isRunning ? 'Đang kết nối...' : 'Chưa kết nối'));
+        if (isRetrying) {
+          displayIp = `⏳ Thử lại (${retryAttempt})`;
+        }
         const isSelected = selectedBot === name;
         const hasPwd = !!(bot.hasPassword || (savedAccounts.find(a => a.username === name && a.hasPassword)));
         const pwdPlaceholder = hasPwd ? '•••••••• (Đã lưu)' : 'Mật khẩu';
+
+        let dotClass = 'bg-slate-600';
+        let nameColor = 'text-slate-200';
+        let btnRunClass = 'bg-emerald-600 hover:bg-emerald-500 text-white';
+        let btnRunContent = '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY';
+
+        if (isRunning) {
+          dotClass = 'bg-emerald-400 shadow-[0_0_6px_#34d399]';
+          nameColor = 'text-emerald-400';
+          btnRunClass = 'bg-rose-600 hover:bg-rose-500 text-white';
+          btnRunContent = '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG';
+        } else if (isRetrying) {
+          dotClass = 'bg-amber-400 shadow-[0_0_6px_#f59e0b] animate-pulse';
+          nameColor = 'text-amber-400';
+          btnRunClass = 'bg-amber-600 hover:bg-amber-500 text-white';
+          btnRunContent = `<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG (Thử lại ${retryAttempt})`;
+        }
 
         let card = document.getElementById(`botcard_${name}`);
         if (!card) {
@@ -1071,15 +1093,15 @@
           card.innerHTML = `
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
-                <span id="stDot_${name}" class="w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0"></span>
-                <span id="stName_${name}" class="font-bold text-xs ${isRunning ? 'text-emerald-400' : 'text-slate-200'}">${escapeHtml(name)}</span>
+                <span id="stDot_${name}" class="w-2 h-2 rounded-full ${dotClass} shrink-0"></span>
+                <span id="stName_${name}" class="font-bold text-xs ${nameColor}">${escapeHtml(name)}</span>
               </div>
-              <div class="flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-[#0a0b10] px-2 py-0.5 rounded border border-[#202436]">
-                <svg class="w-3 h-3 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <div class="flex items-center gap-1 text-[11px] font-mono ${isRetrying ? 'text-amber-400' : 'text-emerald-400'} bg-[#0a0b10] px-2 py-0.5 rounded border border-[#202436]">
+                <svg class="w-3 h-3 ${isRetrying ? 'text-amber-400' : 'text-emerald-400'} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                 </svg>
-                <span id="stIp_${name}">${escapeHtml(currentIp)}</span>
+                <span id="stIp_${name}">${escapeHtml(displayIp)}</span>
               </div>
             </div>
             <div class="flex items-center gap-1.5 pt-0.5" onclick="event.stopPropagation()">
@@ -1095,14 +1117,8 @@
                 </svg>
               </button>
 
-              <button id="btnRun_${name}" onclick="event.stopPropagation(); toggleBotRun('${name}')" class="flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${
-                isRunning 
-                  ? 'bg-rose-600 hover:bg-rose-500 text-white' 
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-              }">
-                ${isRunning 
-                  ? '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG' 
-                  : '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY'}
+              <button id="btnRun_${name}" onclick="event.stopPropagation(); toggleBotRun('${name}')" class="flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${btnRunClass}">
+                ${btnRunContent}
               </button>
 
               <button onclick="event.stopPropagation(); deleteBot('${name}')" title="Xóa session hoàn toàn" class="p-1.5 text-rose-400 hover:text-white bg-rose-600/15 hover:bg-rose-600 border border-rose-500/30 rounded transition shadow-sm">
@@ -1118,25 +1134,26 @@
           // CARD ALREADY EXISTS: ONLY UPDATE DYNAMIC VALUES (NEVER OVERWRITE INNERHTML OR INPUT)
           const dotEl = document.getElementById(`stDot_${name}`);
           if (dotEl) {
-            dotEl.className = `w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0`;
+            dotEl.className = `w-2 h-2 rounded-full ${dotClass} shrink-0`;
           }
 
           const nameEl = document.getElementById(`stName_${name}`);
           if (nameEl) {
-            nameEl.className = `font-bold text-xs ${isRunning ? 'text-emerald-400' : 'text-slate-200'}`;
+            nameEl.className = `font-bold text-xs ${nameColor}`;
           }
 
           const ipEl = document.getElementById(`stIp_${name}`);
-          if (ipEl) ipEl.innerText = currentIp;
+          if (ipEl) {
+            ipEl.innerText = displayIp;
+            if (ipEl.parentElement) {
+              ipEl.parentElement.className = `flex items-center gap-1 text-[11px] font-mono ${isRetrying ? 'text-amber-400' : 'text-emerald-400'} bg-[#0a0b10] px-2 py-0.5 rounded border border-[#202436]`;
+            }
+          }
 
           const btnRun = document.getElementById(`btnRun_${name}`);
           if (btnRun) {
-            btnRun.className = `flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${
-              isRunning ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-            }`;
-            btnRun.innerHTML = isRunning 
-              ? '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> DỪNG' 
-              : '<svg class="w-3 h-3 fill-current inline shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> CHẠY';
+            btnRun.className = `flex-1 py-1 px-2.5 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${btnRunClass}`;
+            btnRun.innerHTML = btnRunContent;
           }
 
           const pwdInp = document.getElementById(`pwd_${name}`);
@@ -1284,13 +1301,18 @@
 
       for (const name of allNames) {
         const isSel = selectedBot === name;
-        const isRun = bots[name] && bots[name].running;
+        const b = bots[name] || {};
+        const isRun = b.running;
+        const isRetry = b.retrying;
+        const dotCls = isRun 
+          ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' 
+          : (isRetry ? 'bg-amber-400 shadow-[0_0_6px_#f59e0b] animate-pulse' : 'bg-slate-600');
         html += `
           <div onclick="selectBotFromDropdown('${escapeHtml(name)}')" class="px-3 py-2 text-xs font-medium cursor-pointer flex items-center justify-between transition ${
             isSel ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-[#202538] hover:text-white'
           }">
             <div class="flex items-center gap-2 truncate">
-              <span class="w-2 h-2 rounded-full ${isRun ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0"></span>
+              <span class="w-2 h-2 rounded-full ${dotCls} shrink-0"></span>
               <span class="truncate font-semibold">${escapeHtml(name)}</span>
             </div>
             ${isSel ? '<span class="text-xs">✓</span>' : ''}
@@ -1303,8 +1325,13 @@
       const iconEl = document.getElementById('botDropdownIcon');
       const labelEl = document.getElementById('botDropdownLabel');
       if (selectedBot) {
-        const isRun = bots[selectedBot] && bots[selectedBot].running;
-        if (iconEl) iconEl.innerHTML = `<span class="w-2 h-2 rounded-full ${isRun ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-slate-600'} shrink-0"></span>`;
+        const selB = bots[selectedBot] || {};
+        const isRun = selB.running;
+        const isRetry = selB.retrying;
+        const dotCls = isRun 
+          ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' 
+          : (isRetry ? 'bg-amber-400 shadow-[0_0_6px_#f59e0b] animate-pulse' : 'bg-slate-600');
+        if (iconEl) iconEl.innerHTML = `<span class="w-2 h-2 rounded-full ${dotCls} shrink-0"></span>`;
         if (labelEl) labelEl.innerText = selectedBot;
       } else {
         if (iconEl) iconEl.innerHTML = '<svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
@@ -1366,11 +1393,13 @@
     function toggleBotRun(name) {
       if (!bots[name]) bots[name] = {};
       const bot = bots[name];
-      const isCurrentlyRunning = !!bot.running;
+      const isCurrentlyRunning = !!(bot.running || bot.retrying);
 
       if (isCurrentlyRunning) {
         // INSTANT OPTIMISTIC FLIP TO STOPPED
         bot.running = false;
+        bot.retrying = false;
+        bot.retry_attempt = 0;
         setActiveRunningBot(name, false);
         setUserStoppedBot(name, true); // ĐÁNH DẤU CHỦ ĐỘNG DỪNG - TUYỆT ĐỐI KHÔNG TỰ CHẠY LẠI
         const btnRun = document.getElementById(`btnRun_${name}`);
@@ -1388,6 +1417,8 @@
       } else {
         // INSTANT OPTIMISTIC FLIP TO RUNNING
         bot.running = true;
+        bot.retrying = false;
+        bot.retry_attempt = 0;
         setActiveRunningBot(name, true);
         setUserStoppedBot(name, false); // XOÁ ĐÁNH DẤU DỪNG KHI NGƯỜI DÙNG BẤM CHẠY
         const btnRun = document.getElementById(`btnRun_${name}`);

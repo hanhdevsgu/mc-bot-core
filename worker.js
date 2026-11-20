@@ -2582,8 +2582,10 @@ class BotInstance {
             const { SocksClient } = require('socks');
             const proxy = this.proxy;
 
-            const proxyUser = (proxy.user && typeof proxy.user === 'string' && proxy.user.trim()) ? proxy.user.trim() : undefined;
-            const proxyPass = (proxy.pass && typeof proxy.pass === 'string' && proxy.pass.trim()) ? proxy.pass.trim() : (proxyUser ? '' : undefined);
+            const rawUser = proxy.user || proxy.username;
+            const rawPass = proxy.pass || proxy.password;
+            const proxyUser = (rawUser && typeof rawUser === 'string' && rawUser.trim()) ? rawUser.trim() : undefined;
+            const proxyPass = (rawPass && typeof rawPass === 'string' && rawPass.trim()) ? rawPass.trim() : (proxyUser ? '' : undefined);
             botOptions.connect = (client) => {
                 const proxyCfg = {
                     host: String(proxy.host).trim(),
@@ -2606,6 +2608,8 @@ class BotInstance {
                         let pMsg = err.message || String(err);
                         if (pMsg.includes('Authentication failed')) {
                             pMsg = 'Socks5 Authentication failed (Sai User/Pass Proxy hoặc Proxy yêu cầu User/Pass nhưng chưa điền đúng)';
+                        } else if (pMsg.includes('no accepted authentication type')) {
+                            pMsg = 'Proxy yêu cầu User & Pass (Authentication), nhưng hiện tại chưa điền User/Pass hoặc để trống. Vui lòng bấm Cài đặt (Bánh răng) để điền User/Pass cho Proxy!';
                         }
                         this.log(`❌ Không kết nối được qua proxy: ${pMsg}`, '#ff4d6d');
                         client.emit('error', err);
