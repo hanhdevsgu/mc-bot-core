@@ -715,8 +715,44 @@ function scheduleStorageStartAfterDelay(username, totalMs) {
 }
 
 function stopBot(username) {
-    if (!bots[username]) {
-        sendToPython('log', `[${username}] Bot không tồn tại!`, '#ff4d6d');
+    if (!bots[username] || !bots[username].running) {
+        try {
+            let s = loadSession(username);
+            if (s) {
+                if (!s.settings) s.settings = {};
+                s.settings.user_manually_stopped = true;
+                saveSession(username, s);
+            }
+        } catch (e) {}
+
+        if (crashRetryTimers[username]) {
+            clearTimeout(crashRetryTimers[username]);
+            delete crashRetryTimers[username];
+        }
+        if (bots[username]) {
+            if (bots[username].storageRestartKillTimer) {
+                clearTimeout(bots[username].storageRestartKillTimer);
+                bots[username].storageRestartKillTimer = null;
+            }
+            if (bots[username].storageRestartStartTimer) {
+                clearTimeout(bots[username].storageRestartStartTimer);
+                bots[username].storageRestartStartTimer = null;
+            }
+            bots[username].plannedStorageRestart = false;
+            bots[username].plannedGuardRestartMs = null;
+            bots[username].running = false;
+            bots[username].retrying = false;
+            bots[username].retry_attempt = 0;
+            bots[username].status_text = 'Đã dừng';
+        }
+        crashRetryCounts[username] = 0;
+        sendToPython('status', username, {
+            running: false,
+            retrying: false,
+            retry_attempt: 0,
+            status_text: 'Đã dừng'
+        });
+        sendToPython('log', `[${username}] ⏸ Đã dừng`, '#8b949e');
         return;
     }
 

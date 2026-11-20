@@ -566,12 +566,17 @@
     let renderBotsScheduled = false;
     let pwdDebounceTimers = {};
 
-    // ── PURGE ANY SENSITIVE PLAINTEXT PASSWORDS FROM LOCAL STORAGE ──
-    // ── CLIENT-SIDE SAFE ACCOUNTS BACKUP & SYNC (BẢO MẬT KHÔNG LỘ MẬT KHẨU) ──
+    // ── CLIENT-SIDE SAFE ACCOUNTS BACKUP & SYNC (BẢO LƯU PROXY & PASSWORDS QUA RENDER) ──
     function getLocalAccounts() {
       try {
         const raw = localStorage.getItem('mc_user_saved_accounts');
-        return raw ? JSON.parse(raw) : [];
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
+        if (typeof parsed === 'object' && parsed !== null) {
+          return Object.values(parsed).filter(Boolean);
+        }
+        return [];
       } catch (e) {
         return [];
       }
@@ -579,13 +584,59 @@
 
     function saveLocalAccounts(accs) {
       try {
-        // Chỉ lưu thông tin bot và settings - không lưu password plaintext để bảo mật tuyệt đối 100%
-        const safe = (accs || []).map(a => ({
-          username: a.username,
-          hasPassword: !!a.hasPassword,
-          settings: a.settings || {}
-        }));
-        localStorage.setItem('mc_user_saved_accounts', JSON.stringify(safe));
+        const existing = {};
+        const currentList = getLocalAccounts();
+        for (const c of currentList) {
+          if (c && c.username) existing[c.username] = c;
+        }
+
+        const inputList = Array.isArray(accs) ? accs : (accs ? Object.values(accs) : []);
+        for (const a of inputList) {
+          if (!a || !a.username) continue;
+          const prev = existing[a.username] || {};
+          const botObj = bots[a.username] || {};
+
+          const pwd = a.password || botObj.password || prev.password || '';
+          const st = Object.assign({}, prev.settings || {}, botObj.settings || {}, a.settings || {});
+
+          // Đảm bảo không bao giờ bị mất cấu hình proxy và username/pass proxy
+          const prevProxy = (prev.settings && prev.settings.proxy) || {};
+          const botProxy = (botObj.settings && botObj.settings.proxy) || {};
+          const stProxy = (st.proxy) || {};
+          const finalProxy = Object.assign({}, prevProxy, botProxy, stProxy);
+
+          const finalUser = finalProxy.user || finalProxy.username || prevProxy.user || prevProxy.username || '';
+          const finalPass = finalProxy.pass || finalProxy.password || prevProxy.pass || prevProxy.password || '';
+          if (finalUser) { finalProxy.user = finalUser; finalProxy.username = finalUser; }
+          if (finalPass) { finalProxy.pass = finalPass; finalProxy.password = finalPass; }
+          if (!finalProxy.host && prevProxy.host) finalProxy.host = prevProxy.host;
+          if (!finalProxy.port && prevProxy.port) finalProxy.port = prevProxy.port;
+          st.proxy = finalProxy;
+
+          existing[a.username] = {
+            username: a.username,
+            password: pwd,
+            settings: st,
+            hasPassword: !!pwd || !!a.hasPassword || !!prev.hasPassword
+          };
+        }
+        localStorage.setItem('mc_user_saved_accounts', JSON.stringify(existing));
+      } catch (e) {}
+    }
+
+    // ── PERSISTENT CHAT CACHE (CHỐNG MẤT LOG & NHẢY CHAT KHI F5) ──
+    function getCachedChat() {
+      try {
+        const raw = sessionStorage.getItem('mc_chat_cache');
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveCachedChat(list) {
+      try {
+        sessionStorage.setItem('mc_chat_cache', JSON.stringify((list || []).slice(-MAX_DOM_LINES * 2)));
       } catch (e) {}
     }
 
@@ -712,14 +763,22 @@
       const isDebug = isDebugPrefix || msg.toLowerCase().includes('debug');
       const isPlayerChat = msg.includes('§') || (msg.includes('<') && msg.includes('>'));
 
-      if (document.getElementById('chkHideDebug').checked && isDebug) return true;
-      if (document.getElementById('chkHideChat').checked && isPlayerChat) return true;
+      if (document.getElementById('chkHideDebug')?.checked && isDebug) return true;
+      if (document.getElementById('chkHideChat')?.checked && isPlayerChat) return true;
 
-      // CHỌN SESSION NÀO THÌ CHỈ SHOW CHAT SESSION ĐÓ
+      // CHỌN BOT NÀO THÌ CHỈ SHOW CHAT & LOG CỦA BOT ĐÓ
       if (selectedBot) {
         const m = msg.match(/^\[([^\]]+)\]/);
-        if (m && m[1] !== selectedBot) {
-          return true;
+        if (m) {
+          return m[1] !== selectedBot;
+        }
+        // Nếu tin nhắn không bắt đầu bằng [botname] (ví dụ: log phụ của bot khác)
+        const otherMatch = msg.match(/\[([a-zA-Z0-9_-]+)\]/);
+        if (otherMatch && otherMatch[1] !== selectedBot) {
+          const allKnown = new Set([...savedAccounts.map(a => a.username), ...Object.keys(bots)]);
+          if (allKnown.has(otherMatch[1])) {
+            return true;
+          }
         }
       }
 
@@ -804,39 +863,104 @@
         updateItemDisplay();
       } else if (type === 'saved_accounts') {
         const rawServerAccounts = args[0] || [];
-        savedAccounts = rawServerAccounts.map(a => ({
-          username: a.username,
-          settings: a.settings || {},
-          hasPassword: !!a.hasPassword
-        }));
+        const localList = getLocalAccounts();
+        const localMap = new Map();
+        for (const loc of localList) {
+          if (loc && loc.username) localMap.set(loc.username, loc);
+        }
 
-        // Đồng bộ 2 chiều: nếu server bị khởi động lại mất account mà client còn lưu trong localStorage thì khôi phục lại
-        const serverUsernames = new Set(savedAccounts.map(a => a.username));
-        const localAccounts = getLocalAccounts();
-        for (const loc of localAccounts) {
-          if (loc.username && !serverUsernames.has(loc.username)) {
-            savedAccounts.push({
-              username: loc.username,
-              settings: loc.settings || {},
-              hasPassword: !!loc.hasPassword
-            });
-            serverUsernames.add(loc.username);
+        const serverMap = new Map();
+        for (const srv of rawServerAccounts) {
+          if (srv && srv.username) serverMap.set(srv.username, srv);
+        }
+
+        // TỰ ĐỘNG KHÔI PHỤC KHI RENDER CONTAINER KHỞI ĐỘNG LẠI (EPHEMERAL DISK):
+        // 1. Nếu server thiếu account nào mà client còn lưu trong localStorage thì gửi tạo lại ngay
+        for (const [uname, loc] of localMap.entries()) {
+          if (!serverMap.has(uname)) {
             if (ws && ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({
                 action: 'create_session',
-                username: loc.username,
-                password: '',
+                username: uname,
+                password: loc.password || '',
                 settings: loc.settings || {}
               }));
             }
+          } else {
+            // 2. Server đã có account nhưng mất password hoặc proxy credentials do Render rebuild container
+            const srv = serverMap.get(uname);
+            const srvProxy = (srv.settings && srv.settings.proxy) || {};
+            const locProxy = (loc.settings && loc.settings.proxy) || {};
+
+            if (!srv.hasPassword && loc.password) {
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  action: 'update_password',
+                  username: uname,
+                  password: loc.password
+                }));
+              }
+            }
+            const locUser = locProxy.user || locProxy.username || '';
+            const locPass = locProxy.pass || locProxy.password || '';
+            const srvUser = srvProxy.user || srvProxy.username || '';
+            const srvPass = srvProxy.pass || srvProxy.password || '';
+            if ((locUser && !srvUser) || (locPass && !srvPass)) {
+              const mergedProxy = Object.assign({}, srvProxy, locProxy, {
+                user: locUser, username: locUser,
+                pass: locPass, password: locPass
+              });
+              const mergedSettings = Object.assign({}, srv.settings || {}, loc.settings || {}, { proxy: mergedProxy });
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  action: 'update_settings',
+                  username: uname,
+                  ...mergedSettings
+                }));
+              }
+            }
           }
         }
+
+        // Hợp nhất danh sách cho UI
+        const mergedAccounts = [];
+        const seenNames = new Set();
+        for (const srv of rawServerAccounts) {
+          if (!srv || !srv.username) continue;
+          seenNames.add(srv.username);
+          const loc = localMap.get(srv.username) || {};
+          const locProxy = (loc.settings && loc.settings.proxy) || {};
+          const srvProxy = (srv.settings && srv.settings.proxy) || {};
+          const finalProxy = Object.assign({}, locProxy, srvProxy);
+          const pUser = locProxy.user || locProxy.username || srvProxy.user || srvProxy.username || '';
+          const pPass = locProxy.pass || locProxy.password || srvProxy.pass || srvProxy.password || '';
+          if (pUser) { finalProxy.user = pUser; finalProxy.username = pUser; }
+          if (pPass) { finalProxy.pass = pPass; finalProxy.password = pPass; }
+
+          const finalSettings = Object.assign({}, loc.settings || {}, srv.settings || {}, { proxy: finalProxy });
+          const finalPwd = srv.password || loc.password || (bots[srv.username] && bots[srv.username].password) || '';
+          mergedAccounts.push({
+            username: srv.username,
+            settings: finalSettings,
+            password: finalPwd,
+            hasPassword: !!finalPwd || !!srv.hasPassword || !!loc.hasPassword
+          });
+        }
+        for (const [uname, loc] of localMap.entries()) {
+          if (!seenNames.has(uname)) {
+            mergedAccounts.push(loc);
+            seenNames.add(uname);
+          }
+        }
+
+        savedAccounts = mergedAccounts;
         saveLocalAccounts(savedAccounts);
 
         for (const acc of savedAccounts) {
           if (!bots[acc.username]) bots[acc.username] = {};
           bots[acc.username].settings = acc.settings || {};
           bots[acc.username].hasPassword = acc.hasPassword;
+          if (acc.password) bots[acc.username].password = acc.password;
         }
 
         // Prune deleted bots from memory & DOM
@@ -849,12 +973,12 @@
           }
         }
 
-        // F5 RESTORE CHECK: If saved bot exists, keep it selected!
+        // F5 RESTORE CHECK: Giữ đúng bot đã chọn và đồng bộ giao diện 100%
         const savedBotPref = localStorage.getItem('mc_bot_selected');
         if (savedBotPref && savedBotPref !== '__all__' && validNames.has(savedBotPref)) {
-          if (selectedBot !== savedBotPref) {
-            selectBot(savedBotPref, false);
-          }
+          selectBot(savedBotPref, true);
+        } else if (savedBotPref === '__all__' || !savedBotPref) {
+          selectBot(null, true);
         }
 
         scheduleRenderBots();
@@ -874,6 +998,7 @@
         if (allChatHistory.length > MAX_DOM_LINES * 2) {
           allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
         }
+        saveCachedChat(allChatHistory);
       } else if (type === 'log') {
         const msg = args[0] || '';
         const color = args[1] || '#94a3b8';
@@ -883,6 +1008,7 @@
         if (allChatHistory.length > MAX_DOM_LINES * 2) {
           allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
         }
+        saveCachedChat(allChatHistory);
         appendLog(null, msg, color, timeStr);
       } else if (type === 'chat_history') {
         const srvHistory = args[0] || [];
@@ -899,10 +1025,11 @@
         if (allChatHistory.length > MAX_DOM_LINES * 2) {
           allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
         }
+        saveCachedChat(allChatHistory);
         renderChatHistory(allChatHistory);
-        // client RAM zero bloat
       } else if (type === 'chat_cleared') {
         allChatHistory = [];
+        saveCachedChat([]);
         document.getElementById('chatBody').innerHTML = '';
       } else if (type === 'ip') {
         const [username, ip] = args;
@@ -1186,6 +1313,13 @@
       bots[name].password = val;
       clearTimeout(pwdDebounceTimers[name]);
 
+      const acc = savedAccounts.find(a => a.username === name);
+      if (acc) {
+        acc.password = val;
+        acc.hasPassword = !!val;
+      }
+      saveLocalAccounts(savedAccounts);
+
       if (ws && ws.readyState === WebSocket.OPEN && val) {
         ws.send(JSON.stringify({
           action: 'update_password',
@@ -1207,7 +1341,8 @@
         ? bot.settings.proxy
         : null;
       const ip = bot.ip || bot.current_ip || (botProxy ? botProxy.host : (bot.running ? 'Đang kết nối...' : 'Chưa kết nối'));
-      document.getElementById('topIp').innerText = ip;
+      const topIpEl = document.getElementById('topIp');
+      if (topIpEl) topIpEl.innerText = selectedBot ? ip : 'Chưa chọn bot';
 
       const badge = document.getElementById('activeBotBadge');
       if (badge) {
@@ -1432,6 +1567,15 @@
         const s = bot.settings || {};
         const pwdInput = document.getElementById(`pwd_${name}`);
         const pwd = pwdInput ? pwdInput.value.trim() : '';
+        if (pwd) {
+          bot.password = pwd;
+          const acc = savedAccounts.find(a => a.username === name);
+          if (acc) {
+            acc.password = pwd;
+            acc.hasPassword = true;
+          }
+          saveLocalAccounts(savedAccounts);
+        }
 
         ws.send(JSON.stringify({
           action: 'start_bot',
@@ -1473,6 +1617,7 @@
       if (!savedAccounts.find(a => a.username === name)) {
         savedAccounts.push({ username: name, settings: {}, hasPassword: false });
       }
+      saveLocalAccounts(savedAccounts);
 
       input.value = '';
       selectBot(name);
@@ -1495,6 +1640,20 @@
       setUserStoppedBot(name, true);
       delete bots[name];
       savedAccounts = savedAccounts.filter(a => a.username !== name);
+      try {
+        const raw = localStorage.getItem('mc_user_saved_accounts');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+            delete parsed[name];
+            localStorage.setItem('mc_user_saved_accounts', JSON.stringify(parsed));
+          } else if (Array.isArray(parsed)) {
+            const filtered = parsed.filter(a => a && a.username !== name);
+            localStorage.setItem('mc_user_saved_accounts', JSON.stringify(filtered));
+          }
+        }
+      } catch (e) {}
+
       const card = document.getElementById(`botcard_${name}`);
       if (card) card.remove();
 
@@ -1607,8 +1766,8 @@
       document.getElementById('cfgProxyEnabled').checked = proxyEnabled;
       document.getElementById('cfgProxyHost').value = proxy.host || '';
       document.getElementById('cfgProxyPort').value = proxy.port || '';
-      document.getElementById('cfgProxyUser').value = proxy.user || '';
-      document.getElementById('cfgProxyPass').value = proxy.pass || '';
+      document.getElementById('cfgProxyUser').value = proxy.user || proxy.username || '';
+      document.getElementById('cfgProxyPass').value = proxy.pass || proxy.password || '';
       toggleProxyFields(proxyEnabled);
 
       document.getElementById('debugStatusLabel').innerText = '';
@@ -1680,8 +1839,8 @@
       const proxyPass = document.getElementById('cfgProxyPass').value.trim();
 
       const existingProxy = (bots[name] && bots[name].settings && bots[name].settings.proxy) || {};
-      const finalProxyUser = proxyUser !== '' ? proxyUser : (existingProxy.user || '');
-      const finalProxyPass = proxyPass !== '' ? proxyPass : (existingProxy.pass || '');
+      const finalProxyUser = proxyUser !== '' ? proxyUser : (existingProxy.user || existingProxy.username || '');
+      const finalProxyPass = proxyPass !== '' ? proxyPass : (existingProxy.pass || existingProxy.password || '');
 
       const newSettings = {
         farm_range: parseFloat(document.getElementById('cfgFarmRange').value) || 2.9,
@@ -1709,8 +1868,10 @@
           host: proxyHost,
           port: proxyPort ? parseInt(proxyPort, 10) : 1080,
           type: 5,
-          user: finalProxyUser || undefined,
-          pass: finalProxyPass || undefined
+          user: finalProxyUser,
+          pass: finalProxyPass,
+          username: finalProxyUser,
+          password: finalProxyPass
         }
       };
 
@@ -1719,12 +1880,24 @@
 
       const newPwd = document.getElementById('cfgBotPassword').value;
       if (newPwd) {
+        bots[name].password = newPwd;
         ws.send(JSON.stringify({
           action: 'update_password',
           username: name,
           password: newPwd
         }));
       }
+
+      // Lưu ngay vào savedAccounts và localStorage
+      const accIdx = savedAccounts.findIndex(a => a.username === name);
+      if (accIdx >= 0) {
+        savedAccounts[accIdx].settings = newSettings;
+        if (newPwd) {
+          savedAccounts[accIdx].password = newPwd;
+          savedAccounts[accIdx].hasPassword = true;
+        }
+      }
+      saveLocalAccounts(savedAccounts);
 
       ws.send(JSON.stringify({
         action: 'update_settings',
@@ -1738,10 +1911,6 @@
     }
 
     // ── INITIALIZATION & PREFERENCES RESTORATION ──
-    // Server holds accounts and database securely.
-    renderBots();
-    updateDropdown();
-
     const savedBotPref = localStorage.getItem('mc_bot_selected');
     const savedHideDebug = localStorage.getItem('mc_bot_hide_debug') === 'true';
     const savedHideChat = localStorage.getItem('mc_bot_hide_chat') === 'true';
@@ -1753,22 +1922,14 @@
       document.getElementById('chkHideChat').checked = savedHideChat;
     }
 
+    // Load cached chat từ sessionStorage để F5 không bao giờ bị trắng hay nhảy log
+    allChatHistory = getCachedChat();
+
+    // Khởi tạo bot đã chọn ban đầu từ local storage
     if (savedBotPref && savedBotPref !== '__all__') {
-      selectedBot = savedBotPref;
-      const badge = document.getElementById('activeBotBadge');
-      if (badge) {
-        badge.innerText = selectedBot;
-        badge.className = 'text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-2 py-0.5 rounded';
-      }
-      const chatInp = document.getElementById('chatInput');
-      if (chatInp) {
-        chatInp.placeholder = `Nhập tin nhắn hoặc lệnh cho ${selectedBot}...`;
-      }
-      updateDropdown();
+      selectBot(savedBotPref, true);
     } else {
-      selectedBot = null;
-      localStorage.removeItem('mc_bot_selected');
-      updateDropdown();
+      selectBot(null, true);
     }
 
     // Khởi động kết nối WebSocket trực tiếp
