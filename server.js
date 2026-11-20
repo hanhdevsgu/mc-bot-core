@@ -357,7 +357,15 @@ function startBot(username, password, opts = {}) {
 
     sendToPython('log', `[${username}] 🚀 Đang khởi động...`, '#2ecc71');
 
-    const botProcess = spawn('node', ['--no-deprecation', path.join(__dirname, 'worker.js'), username, password, JSON.stringify(session)], {
+    const botProcess = spawn('node', [
+        '--no-deprecation',
+        '--max-old-space-size=128',
+        '--expose-gc',
+        path.join(__dirname, 'worker.js'),
+        username,
+        password,
+        JSON.stringify(session)
+    ], {
         cwd: __dirname,
         stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });

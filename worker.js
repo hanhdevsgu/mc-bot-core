@@ -2600,6 +2600,7 @@ class BotInstance {
             checkTimeoutInterval: 60000,
             hideErrors: true,
             connectTimeout: 30000,
+            viewDistance: 'tiny',
         };
 
         if (this.session) {
@@ -3216,3 +3217,10 @@ process.on('SIGTERM', () => {
     }
     process.exit(0);
 });
+
+// Dọn dẹp RAM định kỳ cho các phiên farm 24/7 (hỗ trợ scale 50-100 bot)
+setInterval(() => {
+    try {
+        if (global.gc) global.gc();
+    } catch (e) {}
+}, 300000);

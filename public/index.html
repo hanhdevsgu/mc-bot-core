@@ -249,14 +249,28 @@
           <button id="tabStopped" onclick="setTab('stopped', this)" class="py-1 rounded text-slate-400 hover:text-slate-200 transition">Dừng</button>
         </div>
 
+        <!-- BATCH CONTROLS (DÀNH CHO 50-100 BOT) -->
+        <div class="grid grid-cols-2 gap-1.5">
+          <button onclick="startAllBotsStaggered()" title="Khởi động lần lượt các bot đang dừng (cách nhau 2s chống lag & văng)" 
+                  class="py-1 px-2 rounded bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold transition flex items-center justify-center gap-1 shadow-sm">
+            <svg class="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Chạy hết (So le)
+          </button>
+          <button onclick="stopAllBots()" title="Dừng toàn bộ bot đang chạy an toàn" 
+                  class="py-1 px-2 rounded bg-rose-600/20 hover:bg-rose-600/35 border border-rose-500/40 text-rose-300 text-[11px] font-bold transition flex items-center justify-center gap-1 shadow-sm">
+            <svg class="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            Dừng tất cả
+          </button>
+        </div>
+
         <!-- ROSTER SCROLL LIST -->
         <div id="botListContainer" class="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[140px]"></div>
 
         <!-- TẠO TÀI KHOẢN MỚI -->
         <div class="bg-[#0a0b10] border border-[#202436] rounded-md p-2.5 flex flex-col gap-1.5 shrink-0">
-          <span class="text-[11px] font-semibold text-slate-400">+ Tạo tài khoản mới (nhập username):</span>
+          <span class="text-[11px] font-semibold text-slate-400">+ Tạo tài khoản mới (hỗ trợ nhập nhiều tên bot1, bot2...):</span>
           <div class="flex gap-1.5">
-            <input type="text" id="newUsername" placeholder="Nhập username..." 
+            <input type="text" id="newUsername" placeholder="Ví dụ: bot1, bot2, bot3..." 
                    class="flex-1 bg-[#141622] border border-[#202436] rounded px-2.5 py-1 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-indigo-500 transition select-text"
                    onkeydown="if(event.key==='Enter') createBot()">
             <button onclick="createBot()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded flex items-center gap-1 transition shadow">
@@ -672,20 +686,34 @@
       const stoppedSet = getUserStoppedBots();
       if (runningSet.size === 0) return;
 
+      const toResume = [];
       for (const name of runningSet) {
         if (stoppedSet.has(name)) continue; // TUYỆT ĐỐI KHÔNG CHẠY LẠI BOT ĐÃ BẤM DỪNG
         const bot = bots[name] || {};
         if (!bot.running) {
-          const s = bot.settings || {};
-          ws.send(JSON.stringify({
-            action: 'start_bot',
-            username: name,
-            password: '',
-            settings: s
-          }));
-          appendLog(name, `🔄 [24/7] Tự động kết nối lại cho [${name}] sau khi hệ thống cập nhật...`, '#10b981');
+          toResume.push(name);
         }
       }
+
+      // Khởi động so le (Staggered Queue 2s) khi scale 50-100 bot: tránh dồn dập làm sập server game hoặc ăn đòn anti-bot
+      toResume.forEach((name, idx) => {
+        setTimeout(() => {
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          const stoppedNow = getUserStoppedBots();
+          if (stoppedNow.has(name)) return;
+          const b = bots[name] || {};
+          if (!b.running) {
+            const s = b.settings || {};
+            ws.send(JSON.stringify({
+              action: 'start_bot',
+              username: name,
+              password: '',
+              settings: s
+            }));
+            appendLog(name, `🔄 [24/7] Tự động kết nối lại cho [${name}] (Bot #${idx+1}/${toResume.length})...`, '#10b981');
+          }
+        }, idx * 2000);
+      });
     }
 
     function getActiveRunningBots() {
@@ -1609,29 +1637,128 @@
 
     function createBot() {
       const input = document.getElementById('newUsername');
-      const name = (input.value || '').trim();
-      if (!name) return;
+      const raw = (input.value || '').trim();
+      if (!raw) return;
 
-      setUserStoppedBot(name, true);
-      if (!bots[name]) bots[name] = { username: name, settings: {} };
-      if (!savedAccounts.find(a => a.username === name)) {
-        savedAccounts.push({ username: name, settings: {}, hasPassword: false });
+      // Hỗ trợ tạo hàng loạt nhiều tài khoản cùng lúc (tách bằng dấu phẩy, khoảng trắng hoặc xuống dòng)
+      const names = raw.split(/[\s,;\n\r]+/).map(n => n.trim()).filter(Boolean);
+      if (names.length === 0) return;
+
+      for (const name of names) {
+        setUserStoppedBot(name, true);
+        if (!bots[name]) bots[name] = { username: name, settings: {} };
+        if (!savedAccounts.find(a => a.username === name)) {
+          savedAccounts.push({ username: name, settings: {}, hasPassword: false });
+        }
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            action: 'create_session',
+            username: name,
+            password: '',
+            settings: {}
+          }));
+        }
       }
       saveLocalAccounts(savedAccounts);
 
       input.value = '';
-      selectBot(name);
+      if (names.length === 1) selectBot(names[0]);
       scheduleRenderBots();
       updateDropdown();
+      appendLog(null, `✨ Đã thêm ${names.length} tài khoản mới: ${names.join(', ')}`, '#10b981');
+    }
 
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          action: 'create_session',
-          username: name,
-          password: '',
-          settings: {}
-        }));
+    function startAllBotsStaggered() {
+      const allNames = Array.from(new Set([
+        ...savedAccounts.map(a => a.username),
+        ...Object.keys(bots)
+      ])).filter(Boolean);
+
+      const stoppedBots = allNames.filter(name => {
+        const b = bots[name] || {};
+        return !b.running && !b.retrying;
+      });
+
+      if (stoppedBots.length === 0) {
+        alert('Tất cả bot đã đang chạy!');
+        return;
       }
+
+      if (!confirm(`Xác nhận khởi động so le ${stoppedBots.length} bot (mỗi bot cách nhau 2 giây để chống nghẽn mạng và chống bị kick)?`)) return;
+
+      stoppedBots.forEach((name, idx) => {
+        setTimeout(() => {
+          const b = bots[name] || {};
+          if (b.running) return;
+          b.running = true;
+          b.retrying = false;
+          setActiveRunningBot(name, true);
+          setUserStoppedBot(name, false);
+
+          const s = b.settings || {};
+          const pwdInp = document.getElementById(`pwd_${name}`);
+          const pwd = pwdInputVal(name) || b.password || '';
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              action: 'start_bot',
+              username: name,
+              password: pwd,
+              farm_range: s.farm_range !== undefined ? s.farm_range : 4.0,
+              farm_radius: s.farm_radius !== undefined ? s.farm_radius : 20.0,
+              farm_min_delay: s.farm_min_delay !== undefined ? s.farm_min_delay : 0.5,
+              farm_max_delay: s.farm_max_delay !== undefined ? s.farm_max_delay : 0.8,
+              farm_smart_aim: s.farm_smart_aim || false,
+              farm_lookat: s.farm_lookat !== undefined ? s.farm_lookat : true,
+              afk_persist: s.afk_persist || false,
+              farm_persist: s.farm_persist !== undefined ? s.farm_persist : true,
+              storage_persist: s.storage_persist || false,
+              proxy: s.proxy || null
+            }));
+            appendLog(name, `🚀 [Batch] Bắt đầu khởi động [${name}] (Bot #${idx+1}/${stoppedBots.length})...`, '#10b981');
+          }
+          scheduleRenderBots();
+          updateDropdown();
+        }, idx * 2000);
+      });
+    }
+
+    function pwdInputVal(name) {
+      const el = document.getElementById(`pwd_${name}`);
+      return el ? el.value.trim() : '';
+    }
+
+    function stopAllBots() {
+      const allNames = Array.from(new Set([
+        ...savedAccounts.map(a => a.username),
+        ...Object.keys(bots)
+      ])).filter(Boolean);
+
+      const runningBots = allNames.filter(name => {
+        const b = bots[name] || {};
+        return b.running || b.retrying;
+      });
+
+      if (runningBots.length === 0) {
+        alert('Hiện không có bot nào đang chạy.');
+        return;
+      }
+
+      if (!confirm(`Xác nhận DỪNG toàn bộ ${runningBots.length} bot đang chạy?`)) return;
+
+      for (const name of runningBots) {
+        const b = bots[name] || {};
+        b.running = false;
+        b.retrying = false;
+        b.retry_attempt = 0;
+        setActiveRunningBot(name, false);
+        setUserStoppedBot(name, true);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ action: 'stop_bot', username: name }));
+        }
+      }
+      appendLog(null, `⏸ Đã gửi lệnh DỪNG toàn bộ ${runningBots.length} bot.`, '#f59e0b');
+      scheduleRenderBots();
+      updateDropdown();
     }
 
     function deleteBot(name) {
