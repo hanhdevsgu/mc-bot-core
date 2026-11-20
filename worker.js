@@ -70,7 +70,7 @@ class BotInstance {
         this._adaptiveMarginMax = 3.0;
         this._adaptiveMarginStep = 0.25;
         this._adaptiveMarginDecay = 0.03;
-        this._missTimeoutMs = 450;
+        this._missTimeoutMs = 750;
 
         // ⭐ FIX AUTO-RECOVERY: trước đây _adaptiveReachMargin chỉ TĂNG khi miss và chỉ
         // GIẢM khi có 1 đòn trúng được server xác nhận. Nếu nguyên nhân miss ban đầu
@@ -935,6 +935,34 @@ class BotInstance {
         return nearest;
     }
 
+    _getWeaponCooldownSec() {
+        if (!this.bot || !this.bot.heldItem) return 0.625;
+        const name = (this.bot.heldItem.name || '').toLowerCase();
+        if (name.includes('sword') || name.includes('kiem')) {
+            // Kiếm (Diamond, Netherite, Iron, Gold, Stone, Wood): Tốc độ 1.6 đòn/s -> Hồi đầy 100% sau 1 / 1.6 = 0.625s
+            return 0.625;
+        }
+        if (name.includes('axe') || name.includes('riu')) {
+            // Rìu (Diamond/Netherite: 1.0 đòn/s -> 1.0s; Sắt: 0.9 -> 1.11s; Đá/Gỗ: 0.8 -> 1.25s)
+            if (name.includes('stone') || name.includes('da') || name.includes('wood') || name.includes('go')) return 1.25;
+            if (name.includes('iron') || name.includes('sat')) return 1.11;
+            return 1.0;
+        }
+        if (name.includes('trident') || name.includes('dinh_ba')) return 0.91;
+        if (name.includes('shovel') || name.includes('xeng')) return 1.0;
+        if (name.includes('pickaxe') || name.includes('cuoc')) return 0.833;
+        return 0.625;
+    }
+
+    _calculateNextAttackDelay() {
+        const weaponCooldown = this._getWeaponCooldownSec();
+        // Luôn đảm bảo thời gian chờ đòn sau tối thiểu bằng thời gian nạp đầy cooldown của vũ khí
+        // để 100% lần ra đòn đều đạt Max Damage (kích hoạt chém quét Sweep và sát thương tối đa)
+        const effectiveMin = Math.max(this.farm_min_delay, weaponCooldown);
+        const effectiveMax = Math.max(this.farm_max_delay, effectiveMin + 0.1);
+        return effectiveMin + Math.random() * (effectiveMax - effectiveMin);
+    }
+
     async _attemptAttack(candidateId) {
         if (this._attack_in_progress) return;
         if (!this.bot || !this.running) return;
@@ -993,7 +1021,7 @@ class BotInstance {
             let attackTarget = stillTarget;
             let retargeted = false;
             if (this.farm_use_raycast) {
-                const raycastPick = this._pickRaycastMobTarget(this.ATTACK_REACH + finalMargin);
+                const raycastPick = this._pickRaycastMobTarget(this.ATTACK_REACH + margin);
                 if (raycastPick && raycastPick.entity) {
                     attackTarget = raycastPick.entity;
                     retargeted = attackTarget.id !== stillTarget.id;
@@ -1010,14 +1038,14 @@ class BotInstance {
             this._lastAttackTargetId = attackTargetId;
             this._pendingAttacks.set(attackTargetId, { sentAt: sentNow, expectConfirm });
             this.last_attack_time = Date.now() / 1000;
-            this.next_attack_delay = this.farm_min_delay + Math.random() * (this.farm_max_delay - this.farm_min_delay);
+            this.next_attack_delay = this._calculateNextAttackDelay();
             this._missCount = 0;
 
             const targetName = attackTarget.displayName || attackTarget.name || 'quái';
             this.log(`⚔️ [Farm] Chém: ${targetName} (khoảng cách: ${finalDist.toFixed(1)}m, delay: ${this.next_attack_delay.toFixed(2)}s)`, '#58a6ff');
 
             if (this.farm_debug) {
-                this.log(`⚔️ [debug] Chi tiết: ${attackTarget.name || '?'} (id=${attackTargetId}) dist=${finalDist.toFixed(2)} ping=${(finalLatency * 1000).toFixed(0)}ms margin=${this._adaptiveReachMargin.toFixed(2)}${expectConfirm ? '' : ' (invuln)'}`, '#8b949e');
+                this.log(`⚔️ [debug] Chi tiết: ${attackTarget.name || '?'} (id=${attackTargetId}) dist=${finalDist.toFixed(2)} ping=${(latency * 1000).toFixed(0)}ms margin=${this._adaptiveReachMargin.toFixed(2)}${expectConfirm ? '' : ' (invuln)'}`, '#8b949e');
             }
         } catch (e) {
             if (this.farm_debug) {
@@ -1046,7 +1074,7 @@ class BotInstance {
         this._adaptiveReachMargin = 0;
         this._consecutiveMissTimeouts = 0;
 
-        this.next_attack_delay = this.farm_min_delay + Math.random() * (this.farm_max_delay - this.farm_min_delay);
+        this.next_attack_delay = this._calculateNextAttackDelay();
         this.log(`⚔️ Auto Farm: BẬT (range=${this.farm_range}, tốc độ=${this.farm_min_delay}-${this.farm_max_delay}s)`, '#2ecc71');
         this.sendStatus();
 
