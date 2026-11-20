@@ -931,6 +931,7 @@ function listSavedSessions() {
                                     accountsMap.set(a.username, {
                                         username: a.username,
                                         settings: a,
+                                        password: a.password || '',
                                         hasPassword: !!a.password
                                     });
                                 }
@@ -949,10 +950,12 @@ function listSavedSessions() {
                             const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
                             const existing = accountsMap.get(username);
                             const st = data.settings || (existing ? existing.settings : {}) || {};
-                            const hasPwd = !!(data.password || (existing && existing.hasPassword));
+                            const pwd = data.password || (existing && existing.password) || '';
+                            const hasPwd = !!(pwd || (existing && existing.hasPassword));
                             accountsMap.set(username, {
                                 username,
                                 settings: st,
+                                password: pwd,
                                 hasPassword: hasPwd
                             });
                         } catch (e) {}

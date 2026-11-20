@@ -70,7 +70,7 @@ class BotInstance {
         this._adaptiveMarginMax = 3.0;
         this._adaptiveMarginStep = 0.25;
         this._adaptiveMarginDecay = 0.03;
-        this._missTimeoutMs = 750;
+        this._missTimeoutMs = 1200;
 
         // ⭐ FIX AUTO-RECOVERY: trước đây _adaptiveReachMargin chỉ TĂNG khi miss và chỉ
         // GIẢM khi có 1 đòn trúng được server xác nhận. Nếu nguyên nhân miss ban đầu
@@ -86,7 +86,7 @@ class BotInstance {
         this._maxConsecutiveMissTimeouts = settings.farm_max_consecutive_miss !== undefined
             ? settings.farm_max_consecutive_miss : 4;
 
-        this.farm_debug = settings.farm_debug !== undefined ? settings.farm_debug : false;
+        this.farm_debug = settings.farm_debug !== undefined ? settings.farm_debug : true;
 
         this.farm_smart_aim = false;
         this.farm_lookat = settings.farm_lookat !== undefined ? settings.farm_lookat : true;
@@ -1042,10 +1042,16 @@ class BotInstance {
             this._missCount = 0;
 
             const targetName = attackTarget.displayName || attackTarget.name || 'quái';
-            this.log(`⚔️ [Farm] Chém: ${targetName} (khoảng cách: ${finalDist.toFixed(1)}m, delay: ${this.next_attack_delay.toFixed(2)}s)`, '#58a6ff');
+            const heldItem = this.bot.heldItem;
+            const weaponName = heldItem ? (heldItem.displayName || heldItem.name || 'Vũ khí') : 'Tay không';
+            const weaponCooldown = this._getWeaponCooldownSec();
+            const isFullDamage = this.next_attack_delay >= weaponCooldown;
+            const dameTag = isFullDamage ? '100% MAX Dame' : 'Dame giảm';
+
+            this.log(`⚔️ [Farm] Chém: ${targetName} (kc: ${finalDist.toFixed(1)}m, delay: ${this.next_attack_delay.toFixed(2)}s, vũ khí: ${weaponName} - ${dameTag})`, '#58a6ff');
 
             if (this.farm_debug) {
-                this.log(`⚔️ [debug] Chi tiết: ${attackTarget.name || '?'} (id=${attackTargetId}) dist=${finalDist.toFixed(2)} ping=${(latency * 1000).toFixed(0)}ms margin=${this._adaptiveReachMargin.toFixed(2)}${expectConfirm ? '' : ' (invuln)'}`, '#8b949e');
+                this.log(`⚔️ [debug] Chi tiết: ${attackTarget.name || '?'} (id=${attackTargetId}) dist=${finalDist.toFixed(2)} ping=${(latency * 1000).toFixed(0)}ms margin=${this._adaptiveReachMargin.toFixed(2)} cd=${weaponCooldown.toFixed(3)}s${expectConfirm ? '' : ' (invuln-window)'}`, '#8b949e');
             }
         } catch (e) {
             if (this.farm_debug) {
@@ -1087,6 +1093,10 @@ class BotInstance {
             try {
                 if (this._pendingAttacks.size > 0) {
                     const nowMs = Date.now();
+                    const pingMs = Math.round(this._getLatencySec() * 1000);
+                    // Dynamic timeout: tối thiểu 1200ms, cộng thêm 2.5x RTT qua proxy để tránh false timeout khi lag mạng
+                    this._missTimeoutMs = Math.max(1200, Math.round(this._getLatencySec() * 2500 + 800));
+
                     for (const [id, info] of this._pendingAttacks) {
                         if (nowMs - info.sentAt > this._missTimeoutMs) {
                             this._pendingAttacks.delete(id);
@@ -1099,16 +1109,20 @@ class BotInstance {
                                 continue;
                             }
 
-                            this._adaptiveReachMargin = Math.min(this._adaptiveMarginMax, this._adaptiveReachMargin + this._adaptiveMarginStep);
+                            const e = this.bot.entities[id];
+                            const curDist = e && this.bot.entity ? this._getDistanceToEntity(this.bot.entity.position.offset(0, 1.62, 0), e) : 0;
 
-                            // ⭐ FIX AUTO-RECOVERY: đếm số lần trượt (timeout không xác nhận)
-                            // LIÊN TIẾP. Nếu vượt ngưỡng _maxConsecutiveMissTimeouts, tự động
-                            // làm đúng việc bạn đang phải làm tay (tắt/bật farm): huỷ khoá mục
-                            // tiêu hiện tại + reset margin về 0, để lần chọn/chém tiếp theo bắt
-                            // đầu lại từ điều kiện "sạch" thay vì tiếp tục cộng dồn margin sai.
+                            // CHỈ TĂNG REACH MARGIN NẾU KHOẢNG CÁCH GẦN NGƯỠNG TẦM ĐÁNH (>= 2.5m).
+                            // Nếu mob ở cự ly gần (< 2.5m, vd: 0.8m trong farm), nguyên nhân hụt KHÔNG BAO GIỜ là tầm với,
+                            // tuyệt đối không được thổi phồng margin!
+                            if (curDist >= (this.ATTACK_REACH - 0.5)) {
+                                this._adaptiveReachMargin = Math.min(this._adaptiveMarginMax, this._adaptiveReachMargin + this._adaptiveMarginStep);
+                            }
+
+                            // ⭐ FIX AUTO-RECOVERY: đếm số lần trượt liên tiếp
                             this._consecutiveMissTimeouts++;
                             if (this._consecutiveMissTimeouts >= this._maxConsecutiveMissTimeouts) {
-                                this.log(`🔁 [debug] Trượt liên tiếp ${this._consecutiveMissTimeouts} lần không xác nhận - tự HUỶ KHOÁ mục tiêu + reset margin (giống thao tác tắt/bật farm thủ công).`, '#f5c842');
+                                this.log(`🔁 [debug] Không nhận xác nhận ${this._consecutiveMissTimeouts} lần - tự HUỶ KHOÁ mục tiêu + reset margin về 0.`, '#f5c842');
                                 this._lockedTargetId = null;
                                 this._lockedTargetExpiresAt = 0;
                                 this._adaptiveReachMargin = 0;
@@ -1116,8 +1130,7 @@ class BotInstance {
                             }
 
                             if (this.farm_debug) {
-                                const e = this.bot.entities[id];
-                                this.log(`❌ [debug] TIMEOUT không xác nhận trúng: id=${id} (${e && e.name || '?'}) -> margin=${this._adaptiveReachMargin.toFixed(2)} (trượt liên tiếp: ${this._consecutiveMissTimeouts}/${this._maxConsecutiveMissTimeouts})`, '#ff4d6d');
+                                this.log(`❌ [debug] TIMEOUT không xác nhận trúng: id=${id} (${e && e.name || '?'}) dist=${curDist.toFixed(2)}m ping=${pingMs}ms margin=${this._adaptiveReachMargin.toFixed(2)} (lần ${this._consecutiveMissTimeouts}/${this._maxConsecutiveMissTimeouts})`, '#ff4d6d');
                             }
                         }
                     }
@@ -2702,11 +2715,22 @@ class BotInstance {
             });
 
             const confirmHit = (entity) => {
-                if (entity && this._pendingAttacks.has(entity.id)) {
+                if (!entity) return;
+                let matched = false;
+                if (this._pendingAttacks.has(entity.id)) {
                     this._pendingAttacks.delete(entity.id);
+                    matched = true;
+                } else if (this._pendingAttacks.size > 0) {
+                    // Khi chém kiếm (Sweep attack) vào cụm quái, gói hurt có thể nổ ở con quái bên cạnh
+                    const eyePos = this.bot && this.bot.entity ? this.bot.entity.position.offset(0, 1.62, 0) : null;
+                    if (eyePos && this._getDistanceToEntity(eyePos, entity) <= (this.farm_range + 1.2)) {
+                        this._pendingAttacks.clear();
+                        matched = true;
+                    }
+                }
+
+                if (matched) {
                     this._adaptiveReachMargin = Math.max(0, this._adaptiveReachMargin - this._adaptiveMarginDecay);
-                    // ⭐ FIX AUTO-RECOVERY: có 1 đòn trúng được xác nhận thật sự -> reset
-                    // bộ đếm trượt-liên-tiếp về 0 (chuỗi trượt bị "phá" bởi 1 đòn trúng).
                     this._consecutiveMissTimeouts = 0;
                     if (this.farm_debug) {
                         this.log(`✅ [debug] Server xác nhận TRÚNG: ${entity.name || '?'} (id=${entity.id}) hp=${entity.health !== undefined ? entity.health : '?'}`, '#2ecc71');

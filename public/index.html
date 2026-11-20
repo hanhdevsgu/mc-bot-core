@@ -915,12 +915,13 @@
               }));
             }
           } else {
-            // 2. Server đã có account nhưng mất password hoặc proxy credentials do Render rebuild container
+            // 2. Server đã có account nhưng mất password hoặc settings do Render container vừa deploy lại
             const srv = serverMap.get(uname);
             const srvProxy = (srv.settings && srv.settings.proxy) || {};
             const locProxy = (loc.settings && loc.settings.proxy) || {};
 
-            if (!srv.hasPassword && loc.password) {
+            // Khôi phục mật khẩu bot nếu server trống
+            if ((!srv.hasPassword || !srv.password) && loc.password) {
               if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                   action: 'update_password',
@@ -929,28 +930,21 @@
                 }));
               }
             }
-            const locUser = locProxy.user || locProxy.username || '';
-            const locPass = locProxy.pass || locProxy.password || '';
-            const srvUser = srvProxy.user || srvProxy.username || '';
-            const srvPass = srvProxy.pass || srvProxy.password || '';
-            if ((locUser && !srvUser) || (locPass && !srvPass)) {
-              const mergedProxy = Object.assign({}, srvProxy, locProxy, {
-                user: locUser, username: locUser,
-                pass: locPass, password: locPass
-              });
+
+            // Khôi phục cấu hình tùy chỉnh & Proxy từ client lên container mới
+            if (loc.settings && ws && ws.readyState === WebSocket.OPEN) {
+              const mergedProxy = Object.assign({}, srvProxy, locProxy);
               const mergedSettings = Object.assign({}, srv.settings || {}, loc.settings || {}, { proxy: mergedProxy });
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  action: 'update_settings',
-                  username: uname,
-                  ...mergedSettings
-                }));
-              }
+              ws.send(JSON.stringify({
+                action: 'update_settings',
+                username: uname,
+                ...mergedSettings
+              }));
             }
           }
         }
 
-        // Hợp nhất danh sách cho UI
+        // Hợp nhất danh sách cho UI - Cài đặt và mật khẩu trong LocalStorage của máy người dùng luôn có quyền ưu tiên cao nhất
         const mergedAccounts = [];
         const seenNames = new Set();
         for (const srv of rawServerAccounts) {
@@ -959,14 +953,14 @@
           const loc = localMap.get(srv.username) || {};
           const locProxy = (loc.settings && loc.settings.proxy) || {};
           const srvProxy = (srv.settings && srv.settings.proxy) || {};
-          const finalProxy = Object.assign({}, locProxy, srvProxy);
+          const finalProxy = Object.assign({}, srvProxy, locProxy);
           const pUser = locProxy.user || locProxy.username || srvProxy.user || srvProxy.username || '';
           const pPass = locProxy.pass || locProxy.password || srvProxy.pass || srvProxy.password || '';
           if (pUser) { finalProxy.user = pUser; finalProxy.username = pUser; }
           if (pPass) { finalProxy.pass = pPass; finalProxy.password = pPass; }
 
-          const finalSettings = Object.assign({}, loc.settings || {}, srv.settings || {}, { proxy: finalProxy });
-          const finalPwd = srv.password || loc.password || (bots[srv.username] && bots[srv.username].password) || '';
+          const finalSettings = Object.assign({}, srv.settings || {}, loc.settings || {}, { proxy: finalProxy });
+          const finalPwd = loc.password || srv.password || (bots[srv.username] && bots[srv.username].password) || '';
           mergedAccounts.push({
             username: srv.username,
             settings: finalSettings,
@@ -1001,12 +995,12 @@
           }
         }
 
-        // F5 RESTORE CHECK: Giữ đúng bot đã chọn và đồng bộ giao diện 100%
+        // F5 RESTORE CHECK: Giữ đúng bot đã chọn và đồng bộ giao diện 100% (không gây giật chat)
         const savedBotPref = localStorage.getItem('mc_bot_selected');
-        if (savedBotPref && savedBotPref !== '__all__' && validNames.has(savedBotPref)) {
-          selectBot(savedBotPref, true);
+        if (savedBotPref && savedBotPref !== '__all__' && (validNames.has(savedBotPref) || localMap.has(savedBotPref))) {
+          selectBot(savedBotPref, false);
         } else if (savedBotPref === '__all__' || !savedBotPref) {
-          selectBot(null, true);
+          selectBot(null, false);
         }
 
         scheduleRenderBots();
@@ -1054,7 +1048,10 @@
           allChatHistory = allChatHistory.slice(-MAX_DOM_LINES * 2);
         }
         saveCachedChat(allChatHistory);
-        renderChatHistory(allChatHistory);
+        const chatBodyEl = document.getElementById('chatBody');
+        if (!chatBodyEl || chatBodyEl.children.length === 0) {
+          renderChatHistory(allChatHistory);
+        }
       } else if (type === 'chat_cleared') {
         allChatHistory = [];
         saveCachedChat([]);
@@ -1217,8 +1214,9 @@
           displayIp = `⏳ Thử lại (${retryAttempt})`;
         }
         const isSelected = selectedBot === name;
-        const hasPwd = !!(bot.hasPassword || (savedAccounts.find(a => a.username === name && a.hasPassword)));
-        const pwdPlaceholder = hasPwd ? '•••••••• (Đã lưu)' : 'Mật khẩu';
+        const existingPwd = bot.password || (savedAccounts.find(a => a.username === name) || {}).password || '';
+        const hasPwd = !!(existingPwd || bot.hasPassword || (savedAccounts.find(a => a.username === name && a.hasPassword)));
+        const pwdPlaceholder = hasPwd ? '••••••••' : 'Mật khẩu';
 
         let dotClass = 'bg-slate-600';
         let nameColor = 'text-slate-200';
@@ -1261,7 +1259,7 @@
             </div>
             <div class="flex items-center gap-1.5 pt-0.5" onclick="event.stopPropagation()">
               <input type="password" id="pwd_${name}" placeholder="${pwdPlaceholder}"
-                     value=""
+                     value="${escapeHtml(existingPwd)}"
                      oninput="onPasswordChange('${name}', this.value)" 
                      onblur="savePasswordImmediate('${name}', this.value)"
                      class="w-28 bg-[#141622] border border-[#202436] rounded px-2 py-1 text-xs text-slate-100 placeholder-slate-500 font-mono outline-none focus:border-indigo-500 select-text">
@@ -1314,6 +1312,9 @@
           const pwdInp = document.getElementById(`pwd_${name}`);
           if (pwdInp && document.activeElement !== pwdInp) {
             pwdInp.placeholder = pwdPlaceholder;
+            if (existingPwd && !pwdInp.value) {
+              pwdInp.value = existingPwd;
+            }
           }
         }
 
@@ -1338,9 +1339,19 @@
 
     function savePasswordImmediate(name, val) {
       if (!bots[name]) bots[name] = {};
-      bots[name].password = val;
       clearTimeout(pwdDebounceTimers[name]);
 
+      // NẾU val RỖNG KHI CHỈ BLUR QUA INPUT, GIỮ NGUYÊN MẬT KHẨU ĐÃ LƯU
+      if (!val) {
+        const oldPwd = bots[name].password || (savedAccounts.find(a => a.username === name) || {}).password || '';
+        if (oldPwd) {
+          const inp = document.getElementById(`pwd_${name}`);
+          if (inp && !inp.value) inp.value = oldPwd;
+          return;
+        }
+      }
+
+      bots[name].password = val;
       const acc = savedAccounts.find(a => a.username === name);
       if (acc) {
         acc.password = val;
@@ -1594,14 +1605,13 @@
 
         const s = bot.settings || {};
         const pwdInput = document.getElementById(`pwd_${name}`);
-        const pwd = pwdInput ? pwdInput.value.trim() : '';
+        const pwdTyped = pwdInput ? pwdInput.value.trim() : '';
+        const savedAcc = savedAccounts.find(a => a.username === name) || {};
+        const pwd = pwdTyped || bot.password || savedAcc.password || '';
         if (pwd) {
           bot.password = pwd;
-          const acc = savedAccounts.find(a => a.username === name);
-          if (acc) {
-            acc.password = pwd;
-            acc.hasPassword = true;
-          }
+          savedAcc.password = pwd;
+          savedAcc.hasPassword = true;
           saveLocalAccounts(savedAccounts);
         }
 
@@ -1846,7 +1856,8 @@
       const s = bot.settings || {};
       const proxy = s.proxy || {};
 
-      document.getElementById('cfgBotPassword').value = bot.password || '';
+      const savedAcc = savedAccounts.find(a => a.username === name) || {};
+      document.getElementById('cfgBotPassword').value = bot.password || savedAcc.password || '';
 
       document.getElementById('cfgFarmRange').value = s.farm_range !== undefined ? s.farm_range : 2.9;
       document.getElementById('cfgFarmRadius').value = s.farm_radius !== undefined ? s.farm_radius : 20.0;
